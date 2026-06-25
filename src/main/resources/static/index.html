@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fraud Detection POC — Tokenization Evaluator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    /* Score gauge track colours */
+    .gauge-approved  { background: linear-gradient(90deg, #22c55e, #86efac); }
+    .gauge-review    { background: linear-gradient(90deg, #f59e0b, #fcd34d); }
+    .gauge-rejected  { background: linear-gradient(90deg, #ef4444, #fca5a5); }
+
+    /* Subtle card hover */
+    .field-group { transition: box-shadow 0.15s; }
+    .field-group:hover { box-shadow: 0 0 0 2px #6366f1; }
+
+    /* Markdown prose */
+    .prose h2  { font-size: 1rem; font-weight: 700; margin: 0.75rem 0 0.35rem; }
+    .prose h3  { font-size: 0.9rem; font-weight: 600; margin: 0.6rem 0 0.25rem; }
+    .prose p   { margin: 0.4rem 0; line-height: 1.6; }
+    .prose ul  { list-style: disc; padding-left: 1.25rem; margin: 0.4rem 0; }
+    .prose li  { margin: 0.2rem 0; }
+    .prose strong { font-weight: 700; }
+    .prose code   { background: #1e293b; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.82rem; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 0.8s linear infinite; }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-200 min-h-screen font-mono">
+
+<!-- ─── Header ──────────────────────────────────────────────────────── -->
+<header class="border-b border-slate-800 px-6 py-4 flex items-center gap-3">
+  <div class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></div>
+  <span class="text-indigo-400 font-bold tracking-widest text-sm uppercase">Solaris</span>
+  <span class="text-slate-600 text-sm">|</span>
+  <span class="text-slate-300 text-sm">AI Tokenization Fraud Detection — POC</span>
+</header>
+
+<!-- ─── Main Layout ──────────────────────────────────────────────────── -->
+<main class="grid grid-cols-1 xl:grid-cols-2 gap-0 h-[calc(100vh-57px)]">
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       LEFT PANEL — Input Form
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="border-r border-slate-800 overflow-y-auto p-6 flex flex-col gap-4">
+
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 mb-1">Tokenization Request</h2>
+
+    <form id="evalForm" class="flex flex-col gap-4">
+
+      <!-- Request Identifiers -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Identifiers</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Token Requestor ID <span class="text-red-400">*</span></span>
+            <input id="tokenRequestorId" type="text" placeholder="e.g. APPLE_PAY_REQUESTOR"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Token Reference ID <span class="text-red-400">*</span></span>
+            <input id="tokenReferenceId" type="text" placeholder="e.g. DNITHE302836209"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">PAN Reference ID <span class="text-red-400">*</span></span>
+            <input id="panReferenceId" type="text" placeholder="e.g. FPAN-REF-00124"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Client Wallet Account ID <span class="text-red-400">*</span></span>
+            <input id="clientWalletAccountId" type="text" placeholder="e.g. WALLET-ACC-88291"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1 col-span-2">
+            <span class="text-xs text-slate-400">Wallet Account Email Hash <span class="text-red-400">*</span></span>
+            <input id="walletAccountEmailAddressHash" type="text" placeholder="e.g. b94d27b9934d..."
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Request Options -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Request Options</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">PAN Source</span>
+            <select id="panSource" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="MOBILE_BANKING_APP">MOBILE_BANKING_APP</option>
+              <option value="MANUAL_ENTRY">MANUAL_ENTRY</option>
+              <option value="ON_FILE">ON_FILE</option>
+              <option value="ACCOUNT_ON_RECORD">ACCOUNT_ON_RECORD</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Consumer Entry Mode</span>
+            <select id="consumerEntryMode" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="MANUAL">MANUAL</option>
+              <option value="ON_FILE">ON_FILE</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Locale</span>
+            <input id="locale" type="text" placeholder="e.g. en-US"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Lifecycle Trace ID</span>
+            <input id="lifeCycleTraceId" type="text" placeholder="e.g. LCT-20250625-001"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1 col-span-2">
+            <span class="text-xs text-slate-400">Encrypted Data <span class="text-red-400">*</span></span>
+            <input id="encryptedData" type="text" placeholder="e.g. eyJhbGciOi..."
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Device Info -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Device Info</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">OS Type</span>
+            <select id="osType" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">Unknown</option>
+              <option value="iOS">iOS</option>
+              <option value="Android">Android</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Type</span>
+            <select id="deviceType" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="MOBILE_PHONE">MOBILE_PHONE</option>
+              <option value="TABLET">TABLET</option>
+              <option value="WATCH">WATCH</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device IPv4</span>
+            <input id="deviceIpAddressV4" type="text" placeholder="e.g. 192.168.1.1"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device ID</span>
+            <input id="deviceId" type="text" placeholder="e.g. 043E602BEF50800..."
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Name</span>
+            <input id="deviceName" type="text" placeholder="e.g. iPhone 15 Pro"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Number</span>
+            <input id="deviceNumber" type="text" placeholder="e.g. 4912345678901"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Token Info -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Token Info</p>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Active Tokens</span>
+            <input id="numberOfActiveTokensForPAN" type="number" min="0" placeholder="0"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Inactive Tokens</span>
+            <input id="numberOfInactiveTokensForPAN" type="number" min="0" placeholder="0"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Suspended Tokens</span>
+            <input id="numberOfSuspendedTokensForPAN" type="number" min="0" placeholder="0"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Token Type</span>
+            <select id="tokenType" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="SECURE_ELEMENT">SECURE_ELEMENT</option>
+              <option value="HCE">HCE</option>
+              <option value="CLOUD_BASED">CLOUD_BASED</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1 col-span-2">
+            <span class="text-xs text-slate-400">Token Assurance Method</span>
+            <input id="tokenAssuranceMethod" type="text" placeholder="e.g. OTP"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" id="submitBtn"
+        class="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-colors text-sm tracking-wide uppercase">
+        <span id="btnLabel">Evaluate Request</span>
+        <svg id="btnSpinner" class="spinner hidden w-4 h-4" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-dashoffset="10" stroke-linecap="round"/>
+        </svg>
+      </button>
+
+    </form>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       RIGHT PANEL — Results Dashboard
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="overflow-y-auto p-6 flex flex-col gap-5">
+
+    <h2 class="text-xs uppercase tracking-widest text-slate-500 mb-1">Evaluation Results</h2>
+
+    <!-- Idle state -->
+    <div id="idleState" class="flex flex-col items-center justify-center flex-1 gap-3 text-slate-600 py-24">
+      <svg class="w-12 h-12 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/>
+      </svg>
+      <p class="text-sm">Submit a request to see results</p>
+    </div>
+
+    <!-- Results (hidden until first evaluation) -->
+    <div id="resultsState" class="hidden flex flex-col gap-5">
+
+      <!-- Score Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 flex flex-col gap-4">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest">ML Fraud Score</p>
+
+        <!-- Score number -->
+        <div class="flex items-end gap-3">
+          <span id="scoreDisplay" class="text-5xl font-bold tabular-nums text-white">—</span>
+          <span class="text-slate-500 text-sm mb-1">/ 1.000</span>
+        </div>
+
+        <!-- Gauge track -->
+        <div class="relative w-full h-4 rounded-full bg-slate-800 overflow-hidden">
+          <!-- Threshold markers -->
+          <div class="absolute top-0 bottom-0 w-px bg-yellow-400 opacity-50" style="left:40%"></div>
+          <div class="absolute top-0 bottom-0 w-px bg-red-400 opacity-50" style="left:65%"></div>
+          <!-- Fill bar -->
+          <div id="gaugeBar" class="h-full rounded-full transition-all duration-700" style="width:0%"></div>
+        </div>
+
+        <!-- Threshold labels -->
+        <div class="flex justify-between text-xs text-slate-600 -mt-2">
+          <span>0.00</span>
+          <span class="text-yellow-600" style="margin-left:34%">0.40</span>
+          <span class="text-red-600" style="margin-left:4%">0.65</span>
+          <span>1.00</span>
+        </div>
+
+        <!-- Risk zone labels -->
+        <div class="grid grid-cols-3 gap-2 text-center text-xs">
+          <div class="bg-green-950 border border-green-900 rounded px-2 py-1 text-green-400">Approved &lt; 0.40</div>
+          <div class="bg-yellow-950 border border-yellow-900 rounded px-2 py-1 text-yellow-400">Review 0.40–0.64</div>
+          <div class="bg-red-950 border border-red-900 rounded px-2 py-1 text-red-400">Rejected ≥ 0.65</div>
+        </div>
+      </div>
+
+      <!-- Decision Badge -->
+      <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 flex flex-col gap-2">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest">Final System Decision</p>
+        <div id="decisionBadge" class="inline-flex items-center gap-3 mt-1">
+          <span id="decisionDot" class="w-3 h-3 rounded-full"></span>
+          <span id="decisionText" class="text-3xl font-black tracking-wide"></span>
+        </div>
+      </div>
+
+      <!-- Analyst Audit Report (only when REJECTED) -->
+      <div id="auditReportCard" class="hidden bg-slate-900 border border-slate-800 rounded-lg p-5 flex flex-col gap-3">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+          <p class="text-xs uppercase text-amber-400 tracking-widest">Analyst Audit Report</p>
+          <span class="text-xs text-slate-600 ml-auto">Powered by Amazon Bedrock · Claude 3.5 Sonnet</span>
+        </div>
+        <div id="auditLoading" class="hidden flex items-center gap-2 text-slate-500 text-sm py-3">
+          <svg class="spinner w-4 h-4" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-dasharray="40" stroke-dashoffset="10" stroke-linecap="round"/>
+          </svg>
+          Generating explanation via Bedrock...
+        </div>
+        <div id="auditContent"
+          class="prose text-slate-300 text-sm leading-relaxed border-t border-slate-800 pt-3 mt-1 whitespace-pre-wrap">
+        </div>
+      </div>
+
+      <!-- Error card -->
+      <div id="errorCard" class="hidden bg-red-950 border border-red-900 rounded-lg p-4">
+        <p class="text-xs uppercase text-red-400 tracking-widest mb-2">Error</p>
+        <p id="errorMessage" class="text-red-300 text-sm"></p>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- ─── JavaScript ─────────────────────────────────────────────────── -->
+<script>
+  const API_URL = '/api/v1/evaluate';
+
+  const form        = document.getElementById('evalForm');
+  const submitBtn   = document.getElementById('submitBtn');
+  const btnLabel    = document.getElementById('btnLabel');
+  const btnSpinner  = document.getElementById('btnSpinner');
+
+  const idleState    = document.getElementById('idleState');
+  const resultsState = document.getElementById('resultsState');
+  const errorCard    = document.getElementById('errorCard');
+  const errorMessage = document.getElementById('errorMessage');
+
+  const scoreDisplay   = document.getElementById('scoreDisplay');
+  const gaugeBar       = document.getElementById('gaugeBar');
+  const decisionDot    = document.getElementById('decisionDot');
+  const decisionText   = document.getElementById('decisionText');
+  const auditReportCard = document.getElementById('auditReportCard');
+  const auditContent   = document.getElementById('auditContent');
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  function val(id)    { return document.getElementById(id).value.trim() || null; }
+  function intVal(id) { const v = document.getElementById(id).value; return v !== '' ? parseInt(v) : null; }
+
+  function setLoading(loading) {
+    submitBtn.disabled = loading;
+    btnSpinner.classList.toggle('hidden', !loading);
+    btnLabel.textContent = loading ? 'Evaluating...' : 'Evaluate Request';
+  }
+
+  function gaugeClass(score) {
+    if (score >= 0.65) return 'gauge-rejected';
+    if (score >= 0.40) return 'gauge-review';
+    return 'gauge-approved';
+  }
+
+  function decisionStyle(decision) {
+    switch (decision) {
+      case 'REJECTED': return { dot: 'bg-red-500',    text: 'text-red-400' };
+      case 'REVIEW':   return { dot: 'bg-yellow-400', text: 'text-yellow-400' };
+      default:         return { dot: 'bg-green-500',  text: 'text-green-400' };
+    }
+  }
+
+  function renderResults(data) {
+    const score    = data.score;
+    const decision = data.decision;
+    const explain  = data.aiExplanation;
+
+    // Show results panel
+    idleState.classList.add('hidden');
+    resultsState.classList.remove('hidden');
+    errorCard.classList.add('hidden');
+
+    // Score gauge
+    const pct = Math.min(Math.max(score, 0), 1) * 100;
+    scoreDisplay.textContent = score < 0 ? 'ERR' : score.toFixed(4);
+    gaugeBar.style.width = `${pct}%`;
+    gaugeBar.className = `h-full rounded-full transition-all duration-700 ${gaugeClass(score)}`;
+
+    // Decision badge
+    const style = decisionStyle(decision);
+    decisionDot.className  = `w-3 h-3 rounded-full ${style.dot}`;
+    decisionText.className = `text-3xl font-black tracking-wide ${style.text}`;
+    decisionText.textContent = decision;
+
+    // Audit report
+    if (explain) {
+      auditReportCard.classList.remove('hidden');
+      auditContent.innerHTML = marked.parse(explain);
+    } else {
+      auditReportCard.classList.add('hidden');
+      auditContent.innerHTML = '';
+    }
+  }
+
+  function renderError(message) {
+    idleState.classList.add('hidden');
+    resultsState.classList.remove('hidden');
+    errorCard.classList.remove('hidden');
+    auditReportCard.classList.add('hidden');
+    errorMessage.textContent = message;
+  }
+
+  function buildPayload() {
+    return {
+      tokenRequestorId:              val('tokenRequestorId'),
+      tokenReferenceId:              val('tokenReferenceId'),
+      panReferenceId:                val('panReferenceId'),
+      clientWalletAccountId:         val('clientWalletAccountId'),
+      walletAccountEmailAddressHash: val('walletAccountEmailAddressHash'),
+      encryptedData:                 val('encryptedData'),
+      panSource:                     val('panSource'),
+      consumerEntryMode:             val('consumerEntryMode'),
+      locale:                        val('locale'),
+      lifeCycleTraceId:              val('lifeCycleTraceId'),
+      deviceInfo: {
+        osType:            val('osType'),
+        deviceType:        val('deviceType'),
+        deviceIpAddressV4: val('deviceIpAddressV4'),
+        deviceId:          val('deviceId'),
+        deviceName:        val('deviceName'),
+        deviceNumber:      val('deviceNumber'),
+      },
+      tokenInfo: {
+        numberOfActiveTokensForPAN:    intVal('numberOfActiveTokensForPAN'),
+        numberOfInactiveTokensForPAN:  intVal('numberOfInactiveTokensForPAN'),
+        numberOfSuspendedTokensForPAN: intVal('numberOfSuspendedTokensForPAN'),
+        tokenType:                     val('tokenType'),
+        tokenAssuranceMethod:          val('tokenAssuranceMethod'),
+      }
+    };
+  }
+
+  // ── Form submit ───────────────────────────────────────────────────────
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const payload = buildPayload();
+      const res = await fetch(API_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+
+      const data = await res.json();
+      renderResults(data);
+
+    } catch (err) {
+      renderError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  });
+</script>
+
+</body>
+</html>
