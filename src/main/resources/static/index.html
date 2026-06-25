@@ -351,6 +351,33 @@
     }
   }
 
+  function fillForm(payload) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+    set('tokenRequestorId',              payload.tokenRequestorId);
+    set('tokenReferenceId',              payload.tokenReferenceId);
+    set('panReferenceId',                payload.panReferenceId);
+    set('clientWalletAccountId',         payload.clientWalletAccountId);
+    set('walletAccountEmailAddressHash', payload.walletAccountEmailAddressHash);
+    set('encryptedData',                 payload.encryptedData);
+    set('panSource',                     payload.panSource);
+    set('consumerEntryMode',             payload.consumerEntryMode);
+    set('locale',                        payload.locale);
+    set('lifeCycleTraceId',              payload.lifeCycleTraceId);
+    const d = payload.deviceInfo || {};
+    set('osType',            d.osType);
+    set('deviceType',        d.deviceType);
+    set('deviceIpAddressV4', d.deviceIpAddressV4);
+    set('deviceId',          d.deviceId);
+    set('deviceName',        d.deviceName);
+    set('deviceNumber',      d.deviceNumber);
+    const t = payload.tokenInfo || {};
+    set('numberOfActiveTokensForPAN',    t.numberOfActiveTokensForPAN);
+    set('numberOfInactiveTokensForPAN',  t.numberOfInactiveTokensForPAN);
+    set('numberOfSuspendedTokensForPAN', t.numberOfSuspendedTokensForPAN);
+    set('tokenType',            t.tokenType);
+    set('tokenAssuranceMethod', t.tokenAssuranceMethod);
+  }
+
   document.getElementById('loadLowRisk').addEventListener('click',  () => loadSample('/samples/low-risk.json'));
   document.getElementById('loadHighRisk').addEventListener('click', () => loadSample('/samples/high-risk.json'));
 
