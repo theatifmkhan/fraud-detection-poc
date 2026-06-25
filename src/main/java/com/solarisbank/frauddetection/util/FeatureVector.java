@@ -10,11 +10,15 @@ package com.solarisbank.frauddetection.util;
  *
  * Feature vector length: {@value FEATURE_COUNT}
  *
+ * Source fields are derived from {@link com.solarisbank.frauddetection.dto.TokenizationRequest}
+ * and its nested objects ({@link com.solarisbank.frauddetection.dto.TokenInfo},
+ * {@link com.solarisbank.frauddetection.dto.DeviceInfo}).
+ *
  * Encoding rules:
  * - One-hot binary fields:  1.0f (present) or 0.0f (absent)
- * - Temporal fields:        raw int cast to float; -1.0f if null/unparseable
- * - Numeric fields:         raw double cast to float; 0.0f if null
- * - Derived fields:         see individual field javadoc
+ * - Temporal fields:        raw int cast to float; -1.0f if unavailable
+ * - Numeric fields:         raw value cast to float; 0.0f if null
+ * - Normalised fields:      see individual field javadoc for formula
  *
  * Default fallbacks align with Snowflake cleaning guidelines to prevent
  * training-serving skew.
@@ -27,64 +31,72 @@ public final class FeatureVector {
     public static final int FEATURE_COUNT = 10;
 
     // -------------------------------------------------------------------------
-    // Device OS — one-hot encoding (iOS, Android; both 0 = Unknown)
+    // Device OS — one-hot encoding derived from deviceInfo.osType
     // -------------------------------------------------------------------------
 
-    /** Index 0: 1.0f if deviceOs == "iOS", else 0.0f */
+    /** Index 0: 1.0f if deviceInfo.osType == "iOS" (case-insensitive), else 0.0f */
     public static final int DEVICE_OS_IOS = 0;
 
-    /** Index 1: 1.0f if deviceOs == "Android", else 0.0f */
+    /** Index 1: 1.0f if deviceInfo.osType == "Android" (case-insensitive), else 0.0f */
     public static final int DEVICE_OS_ANDROID = 1;
 
     // -------------------------------------------------------------------------
-    // Temporal features — extracted from ISO-8601 timestamp (UTC)
+    // Temporal features — derived from server-side request ingestion time (UTC)
     // -------------------------------------------------------------------------
 
-    /** Index 2: Hour of day in UTC (0–23). Default: -1.0f if timestamp is null or unparseable. */
+    /** Index 2: Hour of day in UTC at time of request ingestion (0–23). Default: -1.0f on error. */
     public static final int HOUR_OF_DAY = 2;
 
-    /** Index 3: Day of week (1=Monday … 7=Sunday, ISO-8601). Default: -1.0f if timestamp is null or unparseable. */
+    /** Index 3: Day of week at time of request ingestion (1=Monday … 7=Sunday, ISO-8601). Default: -1.0f on error. */
     public static final int DAY_OF_WEEK = 3;
 
     // -------------------------------------------------------------------------
-    // Geolocation features
+    // IP address derived features — from deviceInfo.deviceIpAddressV4
     // -------------------------------------------------------------------------
 
-    /** Index 4: Raw latitude as float. Default: 0.0f if null. */
-    public static final int LATITUDE = 4;
-
-    /** Index 5: Raw longitude as float. Default: 0.0f if null. */
-    public static final int LONGITUDE = 5;
-
-    // -------------------------------------------------------------------------
-    // IP address derived features
-    // -------------------------------------------------------------------------
-
-    /** Index 6: First octet of the IPv4 address as float (e.g. 192.168.1.1 → 192.0f). Default: 0.0f if null or malformed. */
-    public static final int IP_FIRST_OCTET = 6;
+    /** Index 4: First octet of deviceIpAddressV4 as float (e.g. "192.168.1.1" → 192.0f). Default: 0.0f if null or malformed. */
+    public static final int IP_FIRST_OCTET = 4;
 
     /**
-     * Index 7: 1.0f if the IP address falls within an RFC-1918 private range
+     * Index 5: 1.0f if deviceIpAddressV4 falls within an RFC-1918 private range
      * (10.x.x.x, 172.16–31.x.x, 192.168.x.x), else 0.0f.
      * Default: 0.0f if null or malformed.
      */
-    public static final int IP_IS_PRIVATE = 7;
+    public static final int IP_IS_PRIVATE = 5;
+
+    // -------------------------------------------------------------------------
+    // Token count features — from tokenInfo
+    // -------------------------------------------------------------------------
+
+    /**
+     * Index 6: Normalised count of active tokens for this PAN.
+     * Computed as: min(tokenInfo.numberOfActiveTokensForPAN, 20) / 20.0f
+     * Default: 0.0f if tokenInfo or field is null.
+     */
+    public static final int NUM_ACTIVE_TOKENS_NORM = 6;
+
+    /**
+     * Index 7: Normalised count of suspended tokens for this PAN.
+     * Computed as: min(tokenInfo.numberOfSuspendedTokensForPAN, 20) / 20.0f
+     * Default: 0.0f if tokenInfo or field is null.
+     */
+    public static final int NUM_SUSPENDED_TOKENS_NORM = 7;
 
     // -------------------------------------------------------------------------
     // Identity-derived features
     // -------------------------------------------------------------------------
 
     /**
-     * Index 8: Normalised hash of userId.
-     * Computed as: abs(userId.hashCode()) % 1000 / 1000.0f
-     * Default: 0.0f if userId is null or blank.
+     * Index 8: Normalised hash of clientWalletAccountId.
+     * Computed as: abs(clientWalletAccountId.hashCode()) % 1000 / 1000.0f
+     * Default: 0.0f if null or blank.
      */
-    public static final int USER_ID_HASH_NORM = 8;
+    public static final int CLIENT_WALLET_ACCOUNT_HASH_NORM = 8;
 
     /**
-     * Index 9: Normalised length of cardTokenName.
-     * Computed as: min(cardTokenName.length(), 100) / 100.0f
-     * Default: 0.0f if cardTokenName is null or blank.
+     * Index 9: Normalised length of tokenReferenceId.
+     * Computed as: min(tokenReferenceId.length(), 100) / 100.0f
+     * Default: 0.0f if null or blank.
      */
-    public static final int CARD_TOKEN_NAME_LEN_NORM = 9;
+    public static final int TOKEN_REFERENCE_ID_LEN_NORM = 9;
 }
