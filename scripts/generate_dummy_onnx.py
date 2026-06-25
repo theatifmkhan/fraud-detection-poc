@@ -158,9 +158,10 @@ gemm_node.name    = "gemm"
 gemm_node.input.extend(["float_input", "W", "B"])
 gemm_node.output.extend(["gemm_out"])
 # transB=1 means W is used as W^T so shape is [2,10] x [10,N]^T -> [N,2]
+# ONNX AttributeProto types: FLOAT=1, INT=2, STRING=3, TENSOR=4
 attr = gemm_node.attribute.add()
 attr.name  = "transB"
-attr.type  = 1  # INT
+attr.type  = 2  # INT
 attr.i     = 1
 
 softmax_node = NodeProto()
@@ -170,7 +171,7 @@ softmax_node.input.extend(["gemm_out"])
 softmax_node.output.extend(["probabilities"])
 attr2 = softmax_node.attribute.add()
 attr2.name = "axis"
-attr2.type = 1  # INT
+attr2.type = 2  # INT
 attr2.i    = 1
 
 # Graph

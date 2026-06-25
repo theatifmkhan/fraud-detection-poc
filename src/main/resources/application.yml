@@ -2,16 +2,23 @@ spring:
   application:
     name: fraud-detection-poc
 
+  autoconfigure:
+    # Spring AI 2.0.0 retry autoconfiguration requires Spring Framework 7.x (RetryListener).
+    # Excluded here for Spring Boot 3.5.x (Spring Framework 6.2.x) compatibility.
+    # Re-enable when upgrading to Spring Boot 4.x.
+    exclude:
+      - org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration
+
   ai:
     bedrock:
       aws:
         region: eu-central-1
-        access-key: ${AWS_ACCESS_KEY_ID:}
-        secret-key: ${AWS_SECRET_ACCESS_KEY:}
+        # Credentials resolved via AWS DefaultCredentialsProvider chain
+        # (reads AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN from env)
       converse:
         chat:
-          model: anthropic.claude-3-5-sonnet-20241022-v2:0
           options:
+            model: eu.amazon.nova-micro-v1:0
             max-tokens: 1024
             temperature: 0.2
 
