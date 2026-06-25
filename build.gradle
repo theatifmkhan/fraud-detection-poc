@@ -36,6 +36,9 @@ dependencies {
     // Spring AI - Amazon Bedrock Converse (chat + embeddings)
     implementation 'org.springframework.ai:spring-ai-starter-model-bedrock-converse'
 
+    // Spring AI - In-memory vector store (SimpleVectorStore for RAG)
+    implementation 'org.springframework.ai:spring-ai-vector-store'
+
     // ONNX Runtime
     implementation 'com.microsoft.onnxruntime:onnxruntime:1.18.0'
 
