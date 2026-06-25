@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: fraud-detection-poc
+
+  ai:
+    bedrock:
+      aws:
+        region: eu-central-1
+        access-key: ${AWS_ACCESS_KEY_ID:}
+        secret-key: ${AWS_SECRET_ACCESS_KEY:}
+      converse:
+        chat:
+          model: anthropic.claude-3-5-sonnet-20241022-v2:0
+          options:
+            max-tokens: 1024
+            temperature: 0.2
+
+fraud:
+  onnx:
+    model-path: classpath:models/fraud_model.onnx
+    input-node-name: float_input
+    output-node-name: probabilities
+  threshold:
+    review: 0.40
+    reject: 0.65
+
+server:
+  port: 8080
