@@ -1,0 +1,43 @@
+{
+  "deviceOs": {
+    "iOS":     [1, 0],
+    "Android": [0, 1],
+    "Unknown": [0, 0]
+  },
+  "privateIpRanges": [
+    { "prefix": "10.",     "description": "Class A private (RFC-1918)" },
+    { "prefix": "192.168", "description": "Class C private (RFC-1918)" },
+    { "prefix": "172.16",  "description": "Class B private start (RFC-1918)" },
+    { "prefix": "172.17",  "description": "Class B private" },
+    { "prefix": "172.18",  "description": "Class B private" },
+    { "prefix": "172.19",  "description": "Class B private" },
+    { "prefix": "172.20",  "description": "Class B private" },
+    { "prefix": "172.21",  "description": "Class B private" },
+    { "prefix": "172.22",  "description": "Class B private" },
+    { "prefix": "172.23",  "description": "Class B private" },
+    { "prefix": "172.24",  "description": "Class B private" },
+    { "prefix": "172.25",  "description": "Class B private" },
+    { "prefix": "172.26",  "description": "Class B private" },
+    { "prefix": "172.27",  "description": "Class B private" },
+    { "prefix": "172.28",  "description": "Class B private" },
+    { "prefix": "172.29",  "description": "Class B private" },
+    { "prefix": "172.30",  "description": "Class B private" },
+    { "prefix": "172.31",  "description": "Class B private (RFC-1918 end)" }
+  ],
+  "normalisationCaps": {
+    "activeTokensMax":    20,
+    "suspendedTokensMax": 20,
+    "tokenRefIdLenMax":   100,
+    "walletAccountHashMod": 1000
+  },
+  "defaults": {
+    "hourOfDay":     -1.0,
+    "dayOfWeek":     -1.0,
+    "ipFirstOctet":   0.0,
+    "ipIsPrivate":    0.0,
+    "activeTokens":   0.0,
+    "suspendedTokens":0.0,
+    "walletHash":     0.0,
+    "tokenRefLen":    0.0
+  }
+}
