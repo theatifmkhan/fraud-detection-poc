@@ -340,91 +340,19 @@
 
   // ── Sample Payloads ───────────────────────────────────────────────────
 
-  const SAMPLE_LOW_RISK = {
-    tokenRequestorId:              'APPLE_PAY_REQUESTOR',
-    tokenReferenceId:              'DNITHE302836209',
-    panReferenceId:                'FPAN-REF-00124',
-    clientWalletAccountId:         'WALLET-ACC-88291',
-    walletAccountEmailAddressHash: 'b94d27b9934d3e08',
-    encryptedData:                 'eyJhbGciOiJSU0EtT0FFUCJ9',
-    panSource:                     'MOBILE_BANKING_APP',
-    consumerEntryMode:             'ON_FILE',
-    locale:                        'en-DE',
-    lifeCycleTraceId:              'LCT-20250625-LOW-001',
-    deviceInfo: {
-      osType:            'iOS',
-      deviceType:        'MOBILE_PHONE',
-      deviceIpAddressV4: '85.214.132.10',
-      deviceId:          '043E602BEF50800190291281539496303FF438',
-      deviceName:        'iPhone 15 Pro',
-      deviceNumber:      '4912345678901',
-    },
-    tokenInfo: {
-      numberOfActiveTokensForPAN:    1,
-      numberOfInactiveTokensForPAN:  0,
-      numberOfSuspendedTokensForPAN: 0,
-      tokenType:                     'SECURE_ELEMENT',
-      tokenAssuranceMethod:          'OTP',
-    },
-  };
-
-  const SAMPLE_HIGH_RISK = {
-    tokenRequestorId:              'UNKNOWN_REQUESTOR_99',
-    tokenReferenceId:              'X',
-    panReferenceId:                'FPAN-REF-99999',
-    clientWalletAccountId:         'WALLET-FRAUD-001',
-    walletAccountEmailAddressHash: 'aabbccdd11223344',
-    encryptedData:                 'eyJhbGciOiJSU0EtT0FFUCJ9',
-    panSource:                     'MANUAL_ENTRY',
-    consumerEntryMode:             'MANUAL',
-    locale:                        'en-US',
-    lifeCycleTraceId:              'LCT-20250625-HIGH-001',
-    deviceInfo: {
-      osType:            'Android',
-      deviceType:        'MOBILE_PHONE',
-      deviceIpAddressV4: '10.0.0.55',
-      deviceId:          'EMULATOR-FAKE-ID-001',
-      deviceName:        'Generic Android Emulator',
-      deviceNumber:      '',
-    },
-    tokenInfo: {
-      numberOfActiveTokensForPAN:    18,
-      numberOfInactiveTokensForPAN:  4,
-      numberOfSuspendedTokensForPAN: 12,
-      tokenType:                     'HCE',
-      tokenAssuranceMethod:          'NONE',
-    },
-  };
-
-  function fillForm(payload) {
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
-    set('tokenRequestorId',              payload.tokenRequestorId);
-    set('tokenReferenceId',              payload.tokenReferenceId);
-    set('panReferenceId',                payload.panReferenceId);
-    set('clientWalletAccountId',         payload.clientWalletAccountId);
-    set('walletAccountEmailAddressHash', payload.walletAccountEmailAddressHash);
-    set('encryptedData',                 payload.encryptedData);
-    set('panSource',                     payload.panSource);
-    set('consumerEntryMode',             payload.consumerEntryMode);
-    set('locale',                        payload.locale);
-    set('lifeCycleTraceId',              payload.lifeCycleTraceId);
-    const d = payload.deviceInfo || {};
-    set('osType',            d.osType);
-    set('deviceType',        d.deviceType);
-    set('deviceIpAddressV4', d.deviceIpAddressV4);
-    set('deviceId',          d.deviceId);
-    set('deviceName',        d.deviceName);
-    set('deviceNumber',      d.deviceNumber);
-    const t = payload.tokenInfo || {};
-    set('numberOfActiveTokensForPAN',    t.numberOfActiveTokensForPAN);
-    set('numberOfInactiveTokensForPAN',  t.numberOfInactiveTokensForPAN);
-    set('numberOfSuspendedTokensForPAN', t.numberOfSuspendedTokensForPAN);
-    set('tokenType',            t.tokenType);
-    set('tokenAssuranceMethod', t.tokenAssuranceMethod);
+  async function loadSample(path) {
+    try {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      fillForm(payload);
+    } catch (e) {
+      alert(`Failed to load sample: ${e.message}`);
+    }
   }
 
-  document.getElementById('loadLowRisk').addEventListener('click',  () => fillForm(SAMPLE_LOW_RISK));
-  document.getElementById('loadHighRisk').addEventListener('click', () => fillForm(SAMPLE_HIGH_RISK));
+  document.getElementById('loadLowRisk').addEventListener('click',  () => loadSample('/samples/low-risk.json'));
+  document.getElementById('loadHighRisk').addEventListener('click', () => loadSample('/samples/high-risk.json'));
 
   const form        = document.getElementById('evalForm');
   const submitBtn   = document.getElementById('submitBtn');

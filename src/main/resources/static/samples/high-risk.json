@@ -1,0 +1,27 @@
+{
+  "tokenRequestorId":              "UNKNOWN_REQUESTOR_99",
+  "tokenReferenceId":              "X",
+  "panReferenceId":                "FPAN-REF-99999",
+  "clientWalletAccountId":         "WALLET-FRAUD-001",
+  "walletAccountEmailAddressHash": "aabbccdd11223344",
+  "encryptedData":                 "eyJhbGciOiJSU0EtT0FFUCJ9",
+  "panSource":                     "MANUAL_ENTRY",
+  "consumerEntryMode":             "MANUAL",
+  "locale":                        "en-US",
+  "lifeCycleTraceId":              "LCT-20250625-HIGH-001",
+  "deviceInfo": {
+    "osType":            "Android",
+    "deviceType":        "MOBILE_PHONE",
+    "deviceIpAddressV4": "10.0.0.55",
+    "deviceId":          "EMULATOR-FAKE-ID-001",
+    "deviceName":        "Generic Android Emulator",
+    "deviceNumber":      ""
+  },
+  "tokenInfo": {
+    "numberOfActiveTokensForPAN":    18,
+    "numberOfInactiveTokensForPAN":  4,
+    "numberOfSuspendedTokensForPAN": 12,
+    "tokenType":                     "HCE",
+    "tokenAssuranceMethod":          "NONE"
+  }
+}
