@@ -36,7 +36,6 @@ Feature vector index contract (must match FeatureVector.java):
 import os
 import sys
 import struct
-import random
 
 # ---------------------------------------------------------------------------
 # Bootstrap: import onnx protobuf generated classes without C extensions
@@ -94,7 +93,6 @@ print("onnx protobuf loaded (pure Python, no C extensions)")
 
 FEATURE_COUNT = 10
 NUM_CLASSES   = 2
-RANDOM_SEED   = 42
 
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_PATH = os.path.normpath(
@@ -102,20 +100,34 @@ OUTPUT_PATH = os.path.normpath(
 )
 
 # ---------------------------------------------------------------------------
-# Generate fixed random weights (seeded for reproducibility)
+# Biased weights — designed to reflect real fraud signals
+#
+# Feature index contract (must match FeatureVector.java):
+#   0: device_os_ios            (1 = iOS   → lower fraud risk)
+#   1: device_os_android        (1 = Android → slightly higher risk)
+#   2: hour_of_day              (not weighted — avoids time-of-day variance in demo)
+#   3: day_of_week              (not weighted — avoids day-of-week variance in demo)
+#   4: ip_first_octet           (not weighted — value range 0-255 dominates raw)
+#   5: ip_is_private            (1 = RFC-1918 → strong fraud signal)
+#   6: num_active_tokens_norm   (high count → elevated risk)
+#   7: num_suspended_tokens_norm(high count → strongest fraud signal)
+#   8: client_wallet_hash_norm  (not weighted — purely identity hash)
+#   9: token_ref_id_len_norm    (very short ref ID → slight risk signal)
+#
+# Verified scores:
+#   Low  risk sample (iOS, public IP, 1 active,  0 suspended) → ~0.305  APPROVED
+#   High risk sample (Android, private IP, 18 active, 12 suspended) → ~0.883  REJECTED
 # ---------------------------------------------------------------------------
 
-rng = random.Random(RANDOM_SEED)
+# W rows: [W_legit (class 0), W_fraud (class 1)]
+W_values = [
+     0.3, -0.1, 0.0, 0.0, 0.0, -0.5, -0.1, -0.7, 0.0,  0.1,   # class 0 (legitimate)
+    -0.3,  0.1, 0.0, 0.0, 0.0,  0.5,  0.1,  0.7, 0.0, -0.1,   # class 1 (fraud)
+]
+# B: [B_legit, B_fraud] — slight bias towards legitimate
+B_values = [0.1, -0.1]
 
-def rand_floats(n):
-    return [rng.gauss(0, 0.1) for _ in range(n)]
-
-# W: [NUM_CLASSES, FEATURE_COUNT] = [2, 10]
-W_values = rand_floats(NUM_CLASSES * FEATURE_COUNT)
-# B: [NUM_CLASSES] = [2]
-B_values = rand_floats(NUM_CLASSES)
-
-print(f"Generated weights: W[{NUM_CLASSES},{FEATURE_COUNT}], B[{NUM_CLASSES}]")
+print(f"Using biased weights: W[{NUM_CLASSES},{FEATURE_COUNT}], B[{NUM_CLASSES}]")
 
 # ---------------------------------------------------------------------------
 # Build ONNX TensorProto for weights and bias
