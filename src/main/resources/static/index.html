@@ -51,6 +51,28 @@
 
     <h2 class="text-xs uppercase tracking-widest text-slate-500 mb-1">Tokenization Request</h2>
 
+    <!-- Sample Payload Selector -->
+    <div class="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+      <p class="text-xs uppercase text-indigo-400 tracking-widest">Sample Payloads</p>
+      <p class="text-xs text-slate-500">Pre-fill the form with a sample request to test the pipeline quickly.</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button type="button" id="loadLowRisk"
+          class="flex items-center justify-center gap-2 bg-green-900 hover:bg-green-800 active:bg-green-950 border border-green-700 text-green-300 font-semibold py-2 px-4 rounded-lg transition-colors text-sm">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Low Risk Sample
+        </button>
+        <button type="button" id="loadHighRisk"
+          class="flex items-center justify-center gap-2 bg-red-900 hover:bg-red-800 active:bg-red-950 border border-red-700 text-red-300 font-semibold py-2 px-4 rounded-lg transition-colors text-sm">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          High Risk Sample
+        </button>
+      </div>
+    </div>
+
     <form id="evalForm" class="flex flex-col gap-4">
 
       <!-- Request Identifiers -->
@@ -315,6 +337,94 @@
 <!-- ─── JavaScript ─────────────────────────────────────────────────── -->
 <script>
   const API_URL = '/api/v1/evaluate';
+
+  // ── Sample Payloads ───────────────────────────────────────────────────
+
+  const SAMPLE_LOW_RISK = {
+    tokenRequestorId:              'APPLE_PAY_REQUESTOR',
+    tokenReferenceId:              'DNITHE302836209',
+    panReferenceId:                'FPAN-REF-00124',
+    clientWalletAccountId:         'WALLET-ACC-88291',
+    walletAccountEmailAddressHash: 'b94d27b9934d3e08',
+    encryptedData:                 'eyJhbGciOiJSU0EtT0FFUCJ9',
+    panSource:                     'MOBILE_BANKING_APP',
+    consumerEntryMode:             'ON_FILE',
+    locale:                        'en-DE',
+    lifeCycleTraceId:              'LCT-20250625-LOW-001',
+    deviceInfo: {
+      osType:            'iOS',
+      deviceType:        'MOBILE_PHONE',
+      deviceIpAddressV4: '85.214.132.10',
+      deviceId:          '043E602BEF50800190291281539496303FF438',
+      deviceName:        'iPhone 15 Pro',
+      deviceNumber:      '4912345678901',
+    },
+    tokenInfo: {
+      numberOfActiveTokensForPAN:    1,
+      numberOfInactiveTokensForPAN:  0,
+      numberOfSuspendedTokensForPAN: 0,
+      tokenType:                     'SECURE_ELEMENT',
+      tokenAssuranceMethod:          'OTP',
+    },
+  };
+
+  const SAMPLE_HIGH_RISK = {
+    tokenRequestorId:              'UNKNOWN_REQUESTOR_99',
+    tokenReferenceId:              'X',
+    panReferenceId:                'FPAN-REF-99999',
+    clientWalletAccountId:         'WALLET-FRAUD-001',
+    walletAccountEmailAddressHash: 'aabbccdd11223344',
+    encryptedData:                 'eyJhbGciOiJSU0EtT0FFUCJ9',
+    panSource:                     'MANUAL_ENTRY',
+    consumerEntryMode:             'MANUAL',
+    locale:                        'en-US',
+    lifeCycleTraceId:              'LCT-20250625-HIGH-001',
+    deviceInfo: {
+      osType:            'Android',
+      deviceType:        'MOBILE_PHONE',
+      deviceIpAddressV4: '10.0.0.55',
+      deviceId:          'EMULATOR-FAKE-ID-001',
+      deviceName:        'Generic Android Emulator',
+      deviceNumber:      '',
+    },
+    tokenInfo: {
+      numberOfActiveTokensForPAN:    18,
+      numberOfInactiveTokensForPAN:  4,
+      numberOfSuspendedTokensForPAN: 12,
+      tokenType:                     'HCE',
+      tokenAssuranceMethod:          'NONE',
+    },
+  };
+
+  function fillForm(payload) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v ?? ''; };
+    set('tokenRequestorId',              payload.tokenRequestorId);
+    set('tokenReferenceId',              payload.tokenReferenceId);
+    set('panReferenceId',                payload.panReferenceId);
+    set('clientWalletAccountId',         payload.clientWalletAccountId);
+    set('walletAccountEmailAddressHash', payload.walletAccountEmailAddressHash);
+    set('encryptedData',                 payload.encryptedData);
+    set('panSource',                     payload.panSource);
+    set('consumerEntryMode',             payload.consumerEntryMode);
+    set('locale',                        payload.locale);
+    set('lifeCycleTraceId',              payload.lifeCycleTraceId);
+    const d = payload.deviceInfo || {};
+    set('osType',            d.osType);
+    set('deviceType',        d.deviceType);
+    set('deviceIpAddressV4', d.deviceIpAddressV4);
+    set('deviceId',          d.deviceId);
+    set('deviceName',        d.deviceName);
+    set('deviceNumber',      d.deviceNumber);
+    const t = payload.tokenInfo || {};
+    set('numberOfActiveTokensForPAN',    t.numberOfActiveTokensForPAN);
+    set('numberOfInactiveTokensForPAN',  t.numberOfInactiveTokensForPAN);
+    set('numberOfSuspendedTokensForPAN', t.numberOfSuspendedTokensForPAN);
+    set('tokenType',            t.tokenType);
+    set('tokenAssuranceMethod', t.tokenAssuranceMethod);
+  }
+
+  document.getElementById('loadLowRisk').addEventListener('click',  () => fillForm(SAMPLE_LOW_RISK));
+  document.getElementById('loadHighRisk').addEventListener('click', () => fillForm(SAMPLE_HIGH_RISK));
 
   const form        = document.getElementById('evalForm');
   const submitBtn   = document.getElementById('submitBtn');
