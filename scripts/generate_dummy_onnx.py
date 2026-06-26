@@ -8,42 +8,55 @@ Builds the ONNX model directly using protobuf (no numpy/sklearn required)
 to avoid C-extension loading issues on restricted macOS environments.
 
 Model architecture:
-  float_input [N, 26] -> Gemm -> gemm_out [N, 2] -> Softmax -> probabilities [N, 2]
+  float_input [N, 53] -> Gemm -> gemm_out [N, 2] -> Softmax -> probabilities [N, 2]
 
-W [2, 26] and B [2] are manually designed biased weights that reflect real fraud
-signals derived from the Shack.xlsx DataPoints Definition sheet.
+W [2, 53] and B [2] are manually designed biased weights reflecting real fraud
+signals from Shack.xlsx DataPoints Definition sheet.
 
-Feature vector contract (must match FeatureVector.java — 26 features):
-  0  account_holder_name          Free Text     Snowflake MD5 % 1000 / 1000
-  1  token_requestor_id           Low-Card      APPLE=0, GOOGLE=1, OTHER=2 / 2
-  2  consumer_entry_mode          Low-Card      KEY_ENTERED=0, CAMERA_CAPTURED=1, UNKNOWN=2 / 2
-  3  device_ip_address_v4         High-Card IP  MD5(first 3 octets) % 10000 / 10000
-  4  wallet_provider_device_score Ordinal 1-5   raw / 5
-  5  device_type                  Low-Card      UNKNOWN=0..AUTOMOBILE=8 / 8
-  6  wallet_provider_account_score Ordinal 1-5  raw / 5
-  7  device_name                  Free Text     Snowflake MD5 % 1000 / 1000
-  8  device_id                    High-Card     Snowflake MD5 % 1000 / 1000
-  9  wallet_provider_risk_assess  Ordinal 0-2   raw / 2
-  10 device_number                High-Card     Snowflake MD5 % 1000 / 1000
-  11 wallet_provider_reason_codes Low-Card MV   Snowflake MD5 % 100 / 100
-  12 token_type                   Low-Card      SE=0, HCE=1, COF=2, EC=3, QRC=4 / 4
-  13 risk_assessment_score        Ordinal 1-5   raw / 5
-  14 device_language_code         High-Card     Snowflake MD5 % 1000 / 1000
-  15 pan_reference_id             High-Card     Snowflake MD5 % 1000 / 1000
-  16 cvv2_results_code            Low-Card      M=0, N=1, P=2, S=3, U=4, NULL=5 / 5
-  17 pan_source                   Low-Card      KEY_ENTERED=0..CONTACTLESS=5 / 5
-  18 visa_token_score             Ordinal 1-5   raw / 5
-  19 NAME_ON_ACCOUNT              Free Text     Snowflake MD5 % 1000 / 1000
-  20 CARDHOLDER_COUNTRY           High-Card     Snowflake MD5 % 1000 / 1000
-  21 TOKEN_PROVISION_IP_COUNTRY   High-Card     Snowflake MD5 % 10000 / 10000
-  22 LAST_LOGGED_IN_DEVICE_TYPE   Low-Card      iOS=0, Android=1, Web=2 / 2
-  23 LAST_LOGGED_IN_DEVICE_NAME   High-Card     Snowflake MD5 % 1000 / 1000
-  24 LAST_LOGGED_IN_COUNTRY       High-Card     Snowflake MD5 % 1000 / 1000
-  25 LAST_LOGGED_IN_IP_ADDRESS    High-Card IP  MD5(first 3 octets) % 10000 / 10000
+Feature vector contract (must match FeatureVector.java — 53 features):
+  Hash features (0-13):
+    0  account_holder_name             Snowflake MD5 % 1000 / 1000
+    1  device_ip_address_v4            MD5(3 octets) % 10000 / 10000
+    2  device_name                     Snowflake MD5 % 1000 / 1000
+    3  device_id                       Snowflake MD5 % 1000 / 1000
+    4  device_number                   Snowflake MD5 % 1000 / 1000
+    5  wallet_provider_reason_codes    Snowflake MD5 % 100 / 100
+    6  device_language_code            Snowflake MD5 % 1000 / 1000
+    7  pan_reference_id                Snowflake MD5 % 1000 / 1000
+    8  NAME_ON_ACCOUNT                 Snowflake MD5 % 1000 / 1000
+    9  CARDHOLDER_COUNTRY              Snowflake MD5 % 1000 / 1000
+   10  TOKEN_PROVISION_IP_COUNTRY      Snowflake MD5 % 10000 / 10000
+   11  LAST_LOGGED_IN_DEVICE_NAME      Snowflake MD5 % 1000 / 1000
+   12  LAST_LOGGED_IN_COUNTRY          Snowflake MD5 % 1000 / 1000
+   13  LAST_LOGGED_IN_IP_ADDRESS       MD5(3 octets) % 10000 / 10000
+  Ordinal features (14-18):
+   14  wallet_provider_device_score    Ordinal 1-5 / 5
+   15  wallet_provider_account_score   Ordinal 1-5 / 5
+   16  wallet_provider_risk_assessment Ordinal 0-2 / 2
+   17  risk_assessment_score           Ordinal 1-5 / 5
+   18  visa_token_score                Ordinal 1-5 / 5
+  One-hot token_requestor_id (19-20):
+   19  is_APPLE   20  is_GOOGLE
+  One-hot consumer_entry_mode (21-23):
+   21  is_KEY_ENTERED  22  is_CAMERA_CAPTURED  23  is_UNKNOWN
+  One-hot device_type (24-32):
+   24  is_UNKNOWN  25  is_MOBILE_PHONE  26  is_TABLET  27  is_WATCH
+   28  is_MOBILEPHONE_OR_TABLET  29  is_PC  30  is_HOUSEHOLD_DEVICE
+   31  is_WEARABLE_DEVICE  32  is_AUTOMOBILE_DEVICE
+  One-hot token_type (33-37):
+   33  is_SECURE_ELEMENT  34  is_HCE  35  is_CARD_ON_FILE
+   36  is_ECOMMERCE  37  is_QRC
+  One-hot cvv2_results_code (38-43):
+   38  is_M  39  is_N  40  is_P  41  is_S  42  is_U  43  is_NULL
+  One-hot pan_source (44-49):
+   44  is_KEY_ENTERED  45  is_ON_FILE  46  is_MOBILE_BANKING_APP
+   47  is_TOKEN  48  is_CHIP_DIP  49  is_CONTACTLESS_TAP
+  One-hot LAST_LOGGED_IN_DEVICE_TYPE (50-52):
+   50  is_iOS  51  is_Android  52  is_Web
 
-Verified scores at default thresholds (review=0.40, reject=0.65):
-  Low-risk  sample (APPLE, trusted device/account, public IP)  → ~0.285  APPROVED
-  High-risk sample (unknown requestor, step-up assessment, private IP, max risk scores) → ~0.988  REJECTED
+Verified scores (default thresholds review=0.40, reject=0.65):
+  low-risk.json  (APPLE, trusted scores, CVV match, public IP)  → ~0.083  APPROVED
+  high-risk.json (unknown requestor, step-up, max risk, CVV-U)  → ~0.996  REJECTED
 
 Usage:
   pip install onnx
@@ -106,7 +119,7 @@ print("onnx protobuf loaded (pure Python, no C extensions)")
 # Configuration
 # ---------------------------------------------------------------------------
 
-FEATURE_COUNT = 26
+FEATURE_COUNT = 53
 NUM_CLASSES   = 2
 
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
@@ -118,81 +131,59 @@ OUTPUT_PATH = os.path.normpath(
 # Biased weights — designed to reflect real fraud signals from Shack.xlsx
 #
 # W rows: [W_legit (class 0), W_fraud (class 1)]
-# Key signals driving fraud class:
-#   Index  9 wallet_provider_risk_assessment: high (step-up/decline) = suspicious (+0.8)
-#   Index  4 wallet_provider_device_score:    LOW score = untrusted device (-0.5)
-#   Index  6 wallet_provider_account_score:   LOW score = untrusted account (-0.4)
-#   Index 13 risk_assessment_score:           high = bad (+0.6)
-#   Index 18 visa_token_score:                high = bad (+0.5)
-#   Index 16 cvv2_results_code:               U/N = fail/unavailable (+0.3)
-#   Index  1 token_requestor_id:              unknown requestor = higher label (+0.3)
-#   Index 12 token_type:                      HCE riskier than SECURE_ELEMENT (+0.2)
-#   Index  2 consumer_entry_mode:             manual entry modes (+0.2)
-#   Index 17 pan_source:                      KEY_ENTERED=0, higher values are safer... (+0.1)
+#
+# Feature layout (53 features):
+#   0–13  hash features
+#  14–18  ordinal features
+#  19–20  one-hot: token_requestor_id    (APPLE, GOOGLE)
+#  21–23  one-hot: consumer_entry_mode   (KEY_ENTERED, CAMERA_CAPTURED, UNKNOWN)
+#  24–32  one-hot: device_type           (9 values)
+#  33–37  one-hot: token_type            (SE, HCE, COF, ECOMMERCE, QRC)
+#  38–43  one-hot: cvv2_results_code     (M, N, P, S, U, NULL)
+#  44–49  one-hot: pan_source            (KEY_ENTERED, ON_FILE, MBA, TOKEN, CHIP, CT)
+#  50–52  one-hot: last_login_device     (iOS, Android, Web)
+#
+# Key fraud signals:
+#   Index 16: wallet_provider_risk_assessment  +0.8 (step-up = very suspicious)
+#   Index 17: risk_assessment_score            +0.6 (high = bad)
+#   Index 14: wallet_provider_device_score     -0.5 (low = untrusted device)
+#   Index 18: visa_token_score                 +0.5 (high = bad)
+#   Index 42: cvv2 is_U                        +0.5 (unavailable = bad)
+#   Index 15: wallet_provider_account_score    -0.4 (low = untrusted account)
+#   Index 38: cvv2 is_M                        -0.3 (match = good)
+#   Index 39: cvv2 is_N                        +0.3 (no match = bad)
+#   Index 44: pan_source is_KEY_ENTERED        +0.3 (manual entry = riskier)
+#   Index 33: token_type is_SECURE_ELEMENT     -0.2 (hardware = safer)
+#   Index 34: token_type is_HCE               +0.2 (software token = riskier)
+#   Index 46: pan_source is_MBA               -0.2 (banking app = safer)
+#   Index 51: last_login is_Android           +0.1 (slight signal)
+#   Index 20: token_requestor is_GOOGLE       -0.1 (known requestor = safer)
+#
+# Verified scores:
+#   low-risk.json  (APPLE, trusted scores, public IP, CVV match)  → ~0.083  APPROVED
+#   high-risk.json (unknown requestor, step-up, max risk, CVV-U)  → ~0.996  REJECTED
 # ---------------------------------------------------------------------------
 
-W_legit = [
-    -0.0,  # 0  accountHolderName
-    -0.3,  # 1  tokenRequestorId
-    -0.2,  # 2  consumerEntryMode
-    -0.0,  # 3  deviceIpAddressV4
-     0.5,  # 4  walletProviderDeviceScore    (high = trusted = legit)
-    -0.0,  # 5  deviceType
-     0.4,  # 6  walletProviderAccountScore   (high = trusted = legit)
-    -0.0,  # 7  deviceName
-    -0.0,  # 8  deviceId
-    -0.8,  # 9  walletProviderRiskAssessment (high = step-up = fraud)
-    -0.0,  # 10 deviceNumber
-    -0.0,  # 11 walletProviderReasonCodes
-    -0.2,  # 12 tokenType
-    -0.6,  # 13 riskAssessmentScore
-    -0.0,  # 14 deviceLanguageCode
-    -0.0,  # 15 panReferenceId
-    -0.3,  # 16 cvv2ResultsCode
-    -0.1,  # 17 panSource
-    -0.5,  # 18 visaTokenScore
-    -0.0,  # 19 nameOnAccount
-    -0.0,  # 20 cardholderCountry
-    -0.0,  # 21 tokenProvisionIpCountry
-    -0.0,  # 22 lastLoggedInDeviceType
-    -0.0,  # 23 lastLoggedInDeviceName
-    -0.0,  # 24 lastLoggedInCountry
-    -0.0,  # 25 lastLoggedInIpAddress
-]
+W_fraud = [0.0] * FEATURE_COUNT
+W_fraud[14] = -0.5   # wallet_provider_device_score
+W_fraud[15] = -0.4   # wallet_provider_account_score
+W_fraud[16] =  0.8   # wallet_provider_risk_assessment
+W_fraud[17] =  0.6   # risk_assessment_score
+W_fraud[18] =  0.5   # visa_token_score
+W_fraud[20] = -0.1   # token_requestor is_GOOGLE
+W_fraud[33] = -0.2   # token_type is_SECURE_ELEMENT
+W_fraud[34] =  0.2   # token_type is_HCE
+W_fraud[38] = -0.3   # cvv2 is_M (match = good)
+W_fraud[39] =  0.3   # cvv2 is_N (no match = bad)
+W_fraud[42] =  0.5   # cvv2 is_U (unavailable = bad)
+W_fraud[44] =  0.3   # pan_source is_KEY_ENTERED
+W_fraud[46] = -0.2   # pan_source is_MOBILE_BANKING_APP
+W_fraud[51] =  0.1   # last_login is_Android
 
-W_fraud = [
-     0.0,  # 0  accountHolderName
-     0.3,  # 1  tokenRequestorId
-     0.2,  # 2  consumerEntryMode
-     0.0,  # 3  deviceIpAddressV4
-    -0.5,  # 4  walletProviderDeviceScore    (LOW = untrusted)
-     0.0,  # 5  deviceType
-    -0.4,  # 6  walletProviderAccountScore   (LOW = untrusted)
-     0.0,  # 7  deviceName
-     0.0,  # 8  deviceId
-     0.8,  # 9  walletProviderRiskAssessment (HIGH = step-up)
-     0.0,  # 10 deviceNumber
-     0.0,  # 11 walletProviderReasonCodes
-     0.2,  # 12 tokenType
-     0.6,  # 13 riskAssessmentScore
-     0.0,  # 14 deviceLanguageCode
-     0.0,  # 15 panReferenceId
-     0.3,  # 16 cvv2ResultsCode
-     0.1,  # 17 panSource
-     0.5,  # 18 visaTokenScore
-     0.0,  # 19 nameOnAccount
-     0.0,  # 20 cardholderCountry
-     0.0,  # 21 tokenProvisionIpCountry
-     0.0,  # 22 lastLoggedInDeviceType
-     0.0,  # 23 lastLoggedInDeviceName
-     0.0,  # 24 lastLoggedInCountry
-     0.0,  # 25 lastLoggedInIpAddress
-]
-
-# B: [B_legit, B_fraud] — slight bias towards legitimate
+W_legit = [-w for w in W_fraud]
 B_legit, B_fraud = 0.1, -0.1
 
-W_values = W_legit + W_fraud   # shape [2, 26] flattened row-major
+W_values = W_legit + W_fraud
 B_values = [B_legit, B_fraud]
 
 print(f"Using biased weights: W[{NUM_CLASSES},{FEATURE_COUNT}], B[{NUM_CLASSES}]")

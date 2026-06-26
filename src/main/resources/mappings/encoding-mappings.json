@@ -1,70 +1,7 @@
 {
-  "lowCardinality": {
-    "tokenRequestorId": {
-      "APPLE":  0,
-      "GOOGLE": 1
-    },
-    "tokenRequestorIdMax": 2,
-
-    "consumerEntryMode": {
-      "KEY_ENTERED":      0,
-      "CAMERA_CAPTURED":  1,
-      "UNKNOWN":          2
-    },
-    "consumerEntryModeMax": 2,
-
-    "deviceType": {
-      "UNKNOWN":                 0,
-      "MOBILE_PHONE":            1,
-      "TABLET":                  2,
-      "WATCH":                   3,
-      "MOBILEPHONE_OR_TABLET":   4,
-      "PC":                      5,
-      "HOUSEHOLD_DEVICE":        6,
-      "WEARABLE_DEVICE":         7,
-      "AUTOMOBILE_DEVICE":       8
-    },
-    "deviceTypeMax": 8,
-
-    "tokenType": {
-      "SECURE_ELEMENT": 0,
-      "HCE":            1,
-      "CARD_ON_FILE":   2,
-      "ECOMMERCE":      3,
-      "QRC":            4
-    },
-    "tokenTypeMax": 4,
-
-    "cvv2ResultsCode": {
-      "M":    0,
-      "N":    1,
-      "P":    2,
-      "S":    3,
-      "U":    4,
-      "NULL": 5
-    },
-    "cvv2ResultsCodeMax": 5,
-
-    "panSource": {
-      "KEY_ENTERED":        0,
-      "ON_FILE":            1,
-      "MOBILE_BANKING_APP": 2,
-      "TOKEN":              3,
-      "CHIP_DIP":           4,
-      "CONTACTLESS_TAP":    5
-    },
-    "panSourceMax": 5,
-
-    "lastLoggedInDeviceType": {
-      "iOS":     0,
-      "Android": 1,
-      "Web":     2
-    },
-    "lastLoggedInDeviceTypeMax": 2
-  },
-
   "hashBuckets": {
     "accountHolderName":         1000,
+    "ipAddress":                 10000,
     "deviceName":                1000,
     "deviceId":                  1000,
     "deviceNumber":              1000,
@@ -73,10 +10,9 @@
     "panReferenceId":            1000,
     "nameOnAccount":             1000,
     "cardholderCountry":         1000,
+    "tokenProvisionIpCountry":   10000,
     "lastLoggedInDeviceName":    1000,
-    "lastLoggedInCountry":       1000,
-    "ipAddress":                 10000,
-    "tokenProvisionIpCountry":   10000
+    "lastLoggedInCountry":       1000
   },
 
   "ordinalMax": {
@@ -85,11 +21,5 @@
     "walletProviderRiskAssessment": 2,
     "riskAssessmentScore":          5,
     "visaTokenScore":               5
-  },
-
-  "defaults": {
-    "lowCardinalityUnknown":   0.0,
-    "hashUnknown":             0.0,
-    "ordinalUnknown":          0.0
   }
 }
