@@ -5,23 +5,46 @@
   "clientWalletAccountId":         "WALLET-FRAUD-001",
   "walletAccountEmailAddressHash": "aabbccdd11223344",
   "encryptedData":                 "eyJhbGciOiJSU0EtT0FFUCJ9",
-  "panSource":                     "MANUAL_ENTRY",
-  "consumerEntryMode":             "MANUAL",
+  "panSource":                     "KEY_ENTERED",
+  "consumerEntryMode":             "KEY_ENTERED",
+  "cvv2ResultsCode":               "U",
   "locale":                        "en-US",
   "lifeCycleTraceId":              "LCT-20250625-HIGH-001",
+
   "deviceInfo": {
-    "osType":            "Android",
-    "deviceType":        "MOBILE_PHONE",
-    "deviceIpAddressV4": "10.0.0.55",
-    "deviceId":          "EMULATOR-FAKE-ID-001",
-    "deviceName":        "Generic Android Emulator",
-    "deviceNumber":      ""
+    "osType":              "Android",
+    "deviceType":          "MOBILE_PHONE",
+    "deviceIpAddressV4":   "10.0.0.55",
+    "deviceId":            "EMULATOR-FAKE-ID-001",
+    "deviceName":          "Generic Android Emulator",
+    "deviceNumber":        "",
+    "deviceLanguageCode":  ""
   },
+
   "tokenInfo": {
     "numberOfActiveTokensForPAN":    18,
     "numberOfInactiveTokensForPAN":  4,
     "numberOfSuspendedTokensForPAN": 12,
     "tokenType":                     "HCE",
     "tokenAssuranceMethod":          "NONE"
-  }
+  },
+
+  "accountHolderName":          null,
+  "nameOnAccount":              null,
+  "cardholderCountry":          "NG",
+
+  "walletProviderDeviceScore":    1,
+  "walletProviderAccountScore":   1,
+  "walletProviderRiskAssessment": 2,
+  "walletProviderReasonCodes":    "0G,A5",
+
+  "riskAssessmentScore":          5,
+  "visaTokenScore":               5,
+
+  "tokenProvisionIpCountry":      "RU",
+
+  "lastLoggedInDeviceType":       "Android",
+  "lastLoggedInDeviceName":       "Generic Android Emulator",
+  "lastLoggedInCountry":          "NG",
+  "lastLoggedInIpAddress":        "10.0.0.55"
 }

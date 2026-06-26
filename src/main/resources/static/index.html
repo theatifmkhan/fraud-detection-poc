@@ -188,6 +188,11 @@
             <input id="deviceNumber" type="text" placeholder="e.g. 4912345678901"
               class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
           </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Language Code</span>
+            <input id="deviceLanguageCode" type="text" placeholder="e.g. eng"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
         </div>
       </div>
 
@@ -222,6 +227,126 @@
           <label class="flex flex-col gap-1 col-span-2">
             <span class="text-xs text-slate-400">Token Assurance Method</span>
             <input id="tokenAssuranceMethod" type="text" placeholder="e.g. OTP"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Cardholder Identity -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Cardholder Identity</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Account Holder Name</span>
+            <input id="accountHolderName" type="text" placeholder="e.g. John Smith"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Name on Account</span>
+            <input id="nameOnAccount" type="text" placeholder="e.g. John Smith"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Cardholder Country</span>
+            <input id="cardholderCountry" type="text" placeholder="e.g. DE"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">CVV2 Result Code</span>
+            <select id="cvv2ResultsCode" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="M">M — Match</option>
+              <option value="N">N — No match</option>
+              <option value="P">P — Not processed</option>
+              <option value="S">S — Should be present</option>
+              <option value="U">U — Unavailable</option>
+              <option value="NULL">NULL</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <!-- Wallet Provider Risk Signals -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Wallet Provider Risk Signals</p>
+        <p class="text-xs text-slate-500">Source: decrypted from encryptedData.riskInformation in production.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Score <span class="text-slate-600">(1–5)</span></span>
+            <input id="walletProviderDeviceScore" type="number" min="1" max="5" placeholder="1–5"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Account Score <span class="text-slate-600">(1–5)</span></span>
+            <input id="walletProviderAccountScore" type="number" min="1" max="5" placeholder="1–5"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Risk Assessment <span class="text-slate-600">(0–2)</span></span>
+            <select id="walletProviderRiskAssessment" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="0">0 — Approve</option>
+              <option value="1">1 — Decline</option>
+              <option value="2">2 — Require Step-Up</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Reason Codes <span class="text-slate-600">(e.g. 01,A5)</span></span>
+            <input id="walletProviderReasonCodes" type="text" placeholder="e.g. 01 or 01,A5,0G"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Visa Risk Scores -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Visa Risk Scores</p>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Risk Assessment Score <span class="text-slate-600">(1–5)</span></span>
+            <input id="riskAssessmentScore" type="number" min="1" max="5" placeholder="1–5"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Visa Token Score <span class="text-slate-600">(1–5)</span></span>
+            <input id="visaTokenScore" type="number" min="1" max="5" placeholder="1–5"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Token Provision IP Country</span>
+            <input id="tokenProvisionIpCountry" type="text" placeholder="e.g. DE"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Last Login Session -->
+      <div class="field-group bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3">
+        <p class="text-xs uppercase text-indigo-400 tracking-widest mb-1">Last Login Session</p>
+        <p class="text-xs text-slate-500">Source: user session store / DEVICE_DETAILS table.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Type</span>
+            <select id="lastLoggedInDeviceType" class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="">— select —</option>
+              <option value="iOS">iOS</option>
+              <option value="Android">Android</option>
+              <option value="Web">Web</option>
+            </select>
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Device Name</span>
+            <input id="lastLoggedInDeviceName" type="text" placeholder="e.g. iPhone 15 Pro"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">Country</span>
+            <input id="lastLoggedInCountry" type="text" placeholder="e.g. DE"
+              class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
+          </label>
+          <label class="flex flex-col gap-1">
+            <span class="text-xs text-slate-400">IP Address</span>
+            <input id="lastLoggedInIpAddress" type="text" placeholder="e.g. 85.214.132.10"
               class="bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500" />
           </label>
         </div>
@@ -370,12 +495,36 @@
     set('deviceId',          d.deviceId);
     set('deviceName',        d.deviceName);
     set('deviceNumber',      d.deviceNumber);
+    set('deviceLanguageCode',d.deviceLanguageCode);
     const t = payload.tokenInfo || {};
     set('numberOfActiveTokensForPAN',    t.numberOfActiveTokensForPAN);
     set('numberOfInactiveTokensForPAN',  t.numberOfInactiveTokensForPAN);
     set('numberOfSuspendedTokensForPAN', t.numberOfSuspendedTokensForPAN);
     set('tokenType',            t.tokenType);
     set('tokenAssuranceMethod', t.tokenAssuranceMethod);
+
+    // Cardholder identity
+    set('accountHolderName',  payload.accountHolderName);
+    set('nameOnAccount',      payload.nameOnAccount);
+    set('cardholderCountry',  payload.cardholderCountry);
+    set('cvv2ResultsCode',    payload.cvv2ResultsCode);
+
+    // Wallet provider risk signals
+    set('walletProviderDeviceScore',    payload.walletProviderDeviceScore);
+    set('walletProviderAccountScore',   payload.walletProviderAccountScore);
+    set('walletProviderRiskAssessment', payload.walletProviderRiskAssessment);
+    set('walletProviderReasonCodes',    payload.walletProviderReasonCodes);
+
+    // Visa risk scores
+    set('riskAssessmentScore',       payload.riskAssessmentScore);
+    set('visaTokenScore',            payload.visaTokenScore);
+    set('tokenProvisionIpCountry',   payload.tokenProvisionIpCountry);
+
+    // Last login session
+    set('lastLoggedInDeviceType',  payload.lastLoggedInDeviceType);
+    set('lastLoggedInDeviceName',  payload.lastLoggedInDeviceName);
+    set('lastLoggedInCountry',     payload.lastLoggedInCountry);
+    set('lastLoggedInIpAddress',   payload.lastLoggedInIpAddress);
   }
 
   document.getElementById('loadLowRisk').addEventListener('click',  () => loadSample('/samples/low-risk.json'));
@@ -476,12 +625,13 @@
       locale:                        val('locale'),
       lifeCycleTraceId:              val('lifeCycleTraceId'),
       deviceInfo: {
-        osType:            val('osType'),
-        deviceType:        val('deviceType'),
-        deviceIpAddressV4: val('deviceIpAddressV4'),
-        deviceId:          val('deviceId'),
-        deviceName:        val('deviceName'),
-        deviceNumber:      val('deviceNumber'),
+        osType:             val('osType'),
+        deviceType:         val('deviceType'),
+        deviceIpAddressV4:  val('deviceIpAddressV4'),
+        deviceId:           val('deviceId'),
+        deviceName:         val('deviceName'),
+        deviceNumber:       val('deviceNumber'),
+        deviceLanguageCode: val('deviceLanguageCode'),
       },
       tokenInfo: {
         numberOfActiveTokensForPAN:    intVal('numberOfActiveTokensForPAN'),
@@ -489,7 +639,26 @@
         numberOfSuspendedTokensForPAN: intVal('numberOfSuspendedTokensForPAN'),
         tokenType:                     val('tokenType'),
         tokenAssuranceMethod:          val('tokenAssuranceMethod'),
-      }
+      },
+      // Cardholder identity
+      accountHolderName:   val('accountHolderName'),
+      nameOnAccount:       val('nameOnAccount'),
+      cardholderCountry:   val('cardholderCountry'),
+      cvv2ResultsCode:     val('cvv2ResultsCode'),
+      // Wallet provider risk signals
+      walletProviderDeviceScore:    intVal('walletProviderDeviceScore'),
+      walletProviderAccountScore:   intVal('walletProviderAccountScore'),
+      walletProviderRiskAssessment: intVal('walletProviderRiskAssessment'),
+      walletProviderReasonCodes:    val('walletProviderReasonCodes'),
+      // Visa risk scores
+      riskAssessmentScore:      intVal('riskAssessmentScore'),
+      visaTokenScore:           intVal('visaTokenScore'),
+      tokenProvisionIpCountry:  val('tokenProvisionIpCountry'),
+      // Last login session
+      lastLoggedInDeviceType:  val('lastLoggedInDeviceType'),
+      lastLoggedInDeviceName:  val('lastLoggedInDeviceName'),
+      lastLoggedInCountry:     val('lastLoggedInCountry'),
+      lastLoggedInIpAddress:   val('lastLoggedInIpAddress'),
     };
   }
 

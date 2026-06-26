@@ -3,100 +3,286 @@ package com.solarisbank.frauddetection.util;
 /**
  * Canonical feature vector definition for the fraud detection ONNX model.
  *
- * This class defines the strict index order of every feature in the float[]
- * array passed to ModelInferenceService. The order here is the contract between
- * EncodingService and the trained model — it must match the column order used
- * during Snowflake data export and model training exactly.
+ * Defines the strict index order of all 26 features in the float[] array
+ * passed to ModelInferenceService. This contract must match the column order
+ * used during Snowflake data export and SageMaker model training exactly.
  *
  * Feature vector length: {@value FEATURE_COUNT}
  *
- * Source fields are derived from {@link com.solarisbank.frauddetection.dto.TokenizationRequest}
- * and its nested objects ({@link com.solarisbank.frauddetection.dto.TokenInfo},
- * {@link com.solarisbank.frauddetection.dto.DeviceInfo}).
+ * Source document: Shack.xlsx — "DataPoints Definition" sheet (26 rows).
  *
- * Encoding rules:
- * - One-hot binary fields:  1.0f (present) or 0.0f (absent)
- * - Temporal fields:        raw int cast to float; -1.0f if unavailable
- * - Numeric fields:         raw value cast to float; 0.0f if null
- * - Normalised fields:      see individual field javadoc for formula
+ * ──────────────────────────────────────────────────────────────────────
+ * Encoding conventions by data type:
  *
- * Default fallbacks align with Snowflake cleaning guidelines to prevent
- * training-serving skew.
+ *   High-Cardinality / Free Text
+ *     Snowflake-compatible MD5 hash:
+ *       ABS(MD5_NUMBER_LOWER64(value)) % buckets
+ *     Implemented via EncodingService.snowflakeHash(value, buckets).
+ *     Normalised by dividing by the bucket count.
+ *     Default 0.0f when null or blank.
+ *
+ *   IP Address (High-Cardinality)
+ *     As above, but input is the first 3 octets of the IPv4 address
+ *     (e.g. "192.168.1" from "192.168.1.55"), with 10000 buckets.
+ *     Normalised by /10000.
+ *
+ *   Low-Cardinality (categorical)
+ *     Integer label from encoding-mappings.json.
+ *     Normalised by dividing by (number_of_labels - 1).
+ *     Unknown / null values default to 0.0f.
+ *
+ *   Ordinal
+ *     Raw integer cast to float. Normalised by the declared max value.
+ *     Default 0.0f when null.
+ * ──────────────────────────────────────────────────────────────────────
  */
 public final class FeatureVector {
 
     private FeatureVector() {}
 
-    /** Total number of features in the vector. Must match the ONNX model input shape [1, FEATURE_COUNT]. */
-    public static final int FEATURE_COUNT = 10;
+    /** Total number of features. Must match the ONNX model input shape [1, FEATURE_COUNT]. */
+    public static final int FEATURE_COUNT = 26;
 
-    // -------------------------------------------------------------------------
-    // Device OS — one-hot encoding derived from deviceInfo.osType
-    // -------------------------------------------------------------------------
-
-    /** Index 0: 1.0f if deviceInfo.osType == "iOS" (case-insensitive), else 0.0f */
-    public static final int DEVICE_OS_IOS = 0;
-
-    /** Index 1: 1.0f if deviceInfo.osType == "Android" (case-insensitive), else 0.0f */
-    public static final int DEVICE_OS_ANDROID = 1;
-
-    // -------------------------------------------------------------------------
-    // Temporal features — derived from server-side request ingestion time (UTC)
-    // -------------------------------------------------------------------------
-
-    /** Index 2: Hour of day in UTC at time of request ingestion (0–23). Default: -1.0f on error. */
-    public static final int HOUR_OF_DAY = 2;
-
-    /** Index 3: Day of week at time of request ingestion (1=Monday … 7=Sunday, ISO-8601). Default: -1.0f on error. */
-    public static final int DAY_OF_WEEK = 3;
-
-    // -------------------------------------------------------------------------
-    // IP address derived features — from deviceInfo.deviceIpAddressV4
-    // -------------------------------------------------------------------------
-
-    /** Index 4: First octet of deviceIpAddressV4 as float (e.g. "192.168.1.1" → 192.0f). Default: 0.0f if null or malformed. */
-    public static final int IP_FIRST_OCTET = 4;
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 0 — account_holder_name
+    // ─────────────────────────────────────────────────────────────────────────
     /**
-     * Index 5: 1.0f if deviceIpAddressV4 falls within an RFC-1918 private range
-     * (10.x.x.x, 172.16–31.x.x, 192.168.x.x), else 0.0f.
-     * Default: 0.0f if null or malformed.
+     * Free Text | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.accountHolderName}
      */
-    public static final int IP_IS_PRIVATE = 5;
+    public static final int ACCOUNT_HOLDER_NAME = 0;
 
-    // -------------------------------------------------------------------------
-    // Token count features — from tokenInfo
-    // -------------------------------------------------------------------------
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 1 — token_requestor_id
+    // ─────────────────────────────────────────────────────────────────────────
     /**
-     * Index 6: Normalised count of active tokens for this PAN.
-     * Computed as: min(tokenInfo.numberOfActiveTokensForPAN, 20) / 20.0f
-     * Default: 0.0f if tokenInfo or field is null.
+     * Low-Cardinality | Label: APPLE=0, GOOGLE=1, OTHER=2 | normalised /2
+     * Source: {@code TokenizationRequest.tokenRequestorId}
      */
-    public static final int NUM_ACTIVE_TOKENS_NORM = 6;
+    public static final int TOKEN_REQUESTOR_ID = 1;
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 2 — consumer_entry_mode
+    // ─────────────────────────────────────────────────────────────────────────
     /**
-     * Index 7: Normalised count of suspended tokens for this PAN.
-     * Computed as: min(tokenInfo.numberOfSuspendedTokensForPAN, 20) / 20.0f
-     * Default: 0.0f if tokenInfo or field is null.
+     * Low-Cardinality | Label: KEY_ENTERED=0, CAMERA_CAPTURED=1, UNKNOWN=2 | normalised /2
+     * Source: {@code TokenizationRequest.consumerEntryMode}
      */
-    public static final int NUM_SUSPENDED_TOKENS_NORM = 7;
+    public static final int CONSUMER_ENTRY_MODE = 2;
 
-    // -------------------------------------------------------------------------
-    // Identity-derived features
-    // -------------------------------------------------------------------------
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 3 — device_ip_address_v4
+    // ─────────────────────────────────────────────────────────────────────────
     /**
-     * Index 8: Normalised hash of clientWalletAccountId.
-     * Computed as: abs(clientWalletAccountId.hashCode()) % 1000 / 1000.0f
-     * Default: 0.0f if null or blank.
+     * High-Cardinality IP | MD5(first 3 octets) % 10000 | normalised /10000
+     * Source: {@code TokenizationRequest.deviceInfo.deviceIpAddressV4}
      */
-    public static final int CLIENT_WALLET_ACCOUNT_HASH_NORM = 8;
+    public static final int DEVICE_IP_ADDRESS_V4 = 3;
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 4 — wallet_provider_device_score
+    // ─────────────────────────────────────────────────────────────────────────
     /**
-     * Index 9: Normalised length of tokenReferenceId.
-     * Computed as: min(tokenReferenceId.length(), 100) / 100.0f
-     * Default: 0.0f if null or blank.
+     * Ordinal 1–5 | normalised /5 | default 0.0f
+     * Source: {@code TokenizationRequest.walletProviderDeviceScore}
      */
-    public static final int TOKEN_REFERENCE_ID_LEN_NORM = 9;
+    public static final int WALLET_PROVIDER_DEVICE_SCORE = 4;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 5 — device_type
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality | Label: UNKNOWN=0, MOBILE_PHONE=1, TABLET=2, WATCH=3,
+     * MOBILEPHONE_OR_TABLET=4, PC=5, HOUSEHOLD_DEVICE=6, WEARABLE_DEVICE=7,
+     * AUTOMOBILE_DEVICE=8 | normalised /8
+     * Source: {@code TokenizationRequest.deviceInfo.deviceType}
+     */
+    public static final int DEVICE_TYPE = 5;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 6 — wallet_provider_account_score
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Ordinal 1–5 | normalised /5 | default 0.0f
+     * Source: {@code TokenizationRequest.walletProviderAccountScore}
+     */
+    public static final int WALLET_PROVIDER_ACCOUNT_SCORE = 6;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 7 — device_name
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Free Text | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.deviceInfo.deviceName}
+     */
+    public static final int DEVICE_NAME = 7;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 8 — device_id
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.deviceInfo.deviceId}
+     */
+    public static final int DEVICE_ID = 8;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 9 — wallet_provider_risk_assessment
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Ordinal 0–2 | normalised /2 | default 0.0f
+     * 0=approve, 1=decline, 2=require step-up
+     * Source: {@code TokenizationRequest.walletProviderRiskAssessment}
+     */
+    public static final int WALLET_PROVIDER_RISK_ASSESSMENT = 9;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 10 — device_number
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.deviceInfo.deviceNumber}
+     */
+    public static final int DEVICE_NUMBER = 10;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 11 — wallet_provider_reason_codes
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality multi-value | Snowflake MD5 of full string % 100 | normalised /100
+     * Value may be a single code ("01") or comma-separated ("01,A5,0G").
+     * Source: {@code TokenizationRequest.walletProviderReasonCodes}
+     */
+    public static final int WALLET_PROVIDER_REASON_CODES = 11;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 12 — token_type
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality | Label: SECURE_ELEMENT=0, HCE=1, CARD_ON_FILE=2,
+     * ECOMMERCE=3, QRC=4 | normalised /4
+     * Source: {@code TokenizationRequest.tokenInfo.tokenType}
+     */
+    public static final int TOKEN_TYPE = 12;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 13 — risk_assessment_score
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Ordinal 1–5 | normalised /5 | default 0.0f
+     * Source: {@code TokenizationRequest.riskAssessmentScore}
+     */
+    public static final int RISK_ASSESSMENT_SCORE = 13;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 14 — device_language_code
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.deviceInfo.deviceLanguageCode}
+     */
+    public static final int DEVICE_LANGUAGE_CODE = 14;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 15 — pan_reference_id
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.panReferenceId}
+     */
+    public static final int PAN_REFERENCE_ID = 15;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 16 — cvv2_results_code
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality | Label: M=0, N=1, P=2, S=3, U=4, NULL=5 | normalised /5
+     * Source: {@code TokenizationRequest.cvv2ResultsCode}
+     */
+    public static final int CVV2_RESULTS_CODE = 16;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 17 — pan_source
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality | Label: KEY_ENTERED=0, ON_FILE=1, MOBILE_BANKING_APP=2,
+     * TOKEN=3, CHIP_DIP=4, CONTACTLESS_TAP=5 | normalised /5
+     * Source: {@code TokenizationRequest.panSource}
+     */
+    public static final int PAN_SOURCE = 17;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 18 — visa_token_score
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Ordinal 1–5 | normalised /5 | default 0.0f
+     * Source: {@code TokenizationRequest.visaTokenScore}
+     */
+    public static final int VISA_TOKEN_SCORE = 18;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 19 — NAME_ON_ACCOUNT
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Free Text | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.nameOnAccount}
+     * Distinct from ACCOUNT_HOLDER_NAME (index 0) per training data schema.
+     */
+    public static final int NAME_ON_ACCOUNT = 19;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 20 — CARDHOLDER_COUNTRY
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.cardholderCountry}
+     */
+    public static final int CARDHOLDER_COUNTRY = 20;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 21 — TOKEN_PROVISION_IP_COUNTRY
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 10000 | normalised /10000
+     * Resolved from deviceIpAddressV4 via MaxMind in production.
+     * Source: {@code TokenizationRequest.tokenProvisionIpCountry}
+     */
+    public static final int TOKEN_PROVISION_IP_COUNTRY = 21;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 22 — LAST_LOGGED_IN_DEVICE_TYPE
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * Low-Cardinality | Label: iOS=0, Android=1, Web=2 | normalised /2
+     * Source: {@code TokenizationRequest.lastLoggedInDeviceType}
+     */
+    public static final int LAST_LOGGED_IN_DEVICE_TYPE = 22;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 23 — LAST_LOGGED_IN_DEVICE_NAME
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: {@code TokenizationRequest.lastLoggedInDeviceName}
+     */
+    public static final int LAST_LOGGED_IN_DEVICE_NAME = 23;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 24 — LAST_LOGGED_IN_COUNTRY
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality | Snowflake MD5 % 1000 | normalised /1000
+     * Source: DEVICE_DETAILS_DEVICE_IP_COUNTRY column.
+     * Source: {@code TokenizationRequest.lastLoggedInCountry}
+     */
+    public static final int LAST_LOGGED_IN_COUNTRY = 24;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Index 25 — LAST_LOGGED_IN_IP_ADDRESS
+    // ─────────────────────────────────────────────────────────────────────────
+    /**
+     * High-Cardinality IP | MD5(first 3 octets) % 10000 | normalised /10000
+     * Source: {@code TokenizationRequest.lastLoggedInIpAddress}
+     */
+    public static final int LAST_LOGGED_IN_IP_ADDRESS = 25;
 }

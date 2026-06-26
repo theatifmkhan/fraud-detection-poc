@@ -12,18 +12,29 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
-import java.time.DayOfWeek;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Converts a raw {@link TokenizationRequest} into a fixed-length float array
  * ready for ONNX model inference.
  *
- * Feature order is defined by {@link FeatureVector} constants and must match
- * the column order used during Snowflake data export and model training exactly.
+ * Feature order is defined by {@link FeatureVector} constants (26 features)
+ * and must match the column order used during Snowflake data export and model
+ * training exactly.
  *
- * Encoding rules and null-handling defaults are loaded from
+ * Hashing strategy: all High-Cardinality and Free-Text fields use the
+ * Snowflake-compatible MD5 hash:
+ *   ABS(MD5_NUMBER_LOWER64(value)) % buckets
+ * which replicates Snowflake's built-in MD5_NUMBER_LOWER64 function, ensuring
+ * that training-time (Snowflake) and serving-time (Java) bucket assignments
+ * are identical.
+ *
+ * Encoding rules and bucket sizes are loaded from
  * {@code classpath:mappings/encoding-mappings.json} at startup.
  */
 @Slf4j
@@ -32,21 +43,45 @@ public class EncodingService {
 
     private static final String MAPPINGS_PATH = "mappings/encoding-mappings.json";
 
-    // Normalisation caps (loaded from mappings JSON)
-    private int activeTokensMax;
-    private int suspendedTokensMax;
-    private int tokenRefIdLenMax;
-    private int walletAccountHashMod;
+    // Low-cardinality label maps loaded from JSON
+    private Map<String, Integer> tokenRequestorIdMap;
+    private Map<String, Integer> consumerEntryModeMap;
+    private Map<String, Integer> deviceTypeMap;
+    private Map<String, Integer> tokenTypeMap;
+    private Map<String, Integer> cvv2ResultsCodeMap;
+    private Map<String, Integer> panSourceMap;
+    private Map<String, Integer> lastLoggedInDeviceTypeMap;
 
-    // Default fallback values (loaded from mappings JSON)
-    private float defaultHourOfDay;
-    private float defaultDayOfWeek;
-    private float defaultIpFirstOctet;
-    private float defaultIpIsPrivate;
-    private float defaultActiveTokens;
-    private float defaultSuspendedTokens;
-    private float defaultWalletHash;
-    private float defaultTokenRefLen;
+    // Normalisation denominators for low-cardinality
+    private int tokenRequestorIdMax;
+    private int consumerEntryModeMax;
+    private int deviceTypeMax;
+    private int tokenTypeMax;
+    private int cvv2ResultsCodeMax;
+    private int panSourceMax;
+    private int lastLoggedInDeviceTypeMax;
+
+    // Hash bucket sizes
+    private long bucketsAccountHolderName;
+    private long bucketsDeviceName;
+    private long bucketsDeviceId;
+    private long bucketsDeviceNumber;
+    private long bucketsWalletReasonCodes;
+    private long bucketsDeviceLanguageCode;
+    private long bucketsPanReferenceId;
+    private long bucketsNameOnAccount;
+    private long bucketsCardholderCountry;
+    private long bucketsLastLoggedInDeviceName;
+    private long bucketsLastLoggedInCountry;
+    private long bucketsIpAddress;
+    private long bucketsTokenProvisionIpCountry;
+
+    // Ordinal max values
+    private int maxWalletProviderDeviceScore;
+    private int maxWalletProviderAccountScore;
+    private int maxWalletProviderRiskAssessment;
+    private int maxRiskAssessmentScore;
+    private int maxVisaTokenScore;
 
     private final ObjectMapper objectMapper;
 
@@ -59,23 +94,45 @@ public class EncodingService {
         try (InputStream is = new ClassPathResource(MAPPINGS_PATH).getInputStream()) {
             JsonNode root = objectMapper.readTree(is);
 
-            JsonNode caps = root.get("normalisationCaps");
-            activeTokensMax    = caps.get("activeTokensMax").asInt();
-            suspendedTokensMax = caps.get("suspendedTokensMax").asInt();
-            tokenRefIdLenMax   = caps.get("tokenRefIdLenMax").asInt();
-            walletAccountHashMod = caps.get("walletAccountHashMod").asInt();
+            JsonNode lc = root.get("lowCardinality");
+            tokenRequestorIdMap       = toMap(lc.get("tokenRequestorId"));
+            tokenRequestorIdMax       = lc.get("tokenRequestorIdMax").asInt();
+            consumerEntryModeMap      = toMap(lc.get("consumerEntryMode"));
+            consumerEntryModeMax      = lc.get("consumerEntryModeMax").asInt();
+            deviceTypeMap             = toMap(lc.get("deviceType"));
+            deviceTypeMax             = lc.get("deviceTypeMax").asInt();
+            tokenTypeMap              = toMap(lc.get("tokenType"));
+            tokenTypeMax              = lc.get("tokenTypeMax").asInt();
+            cvv2ResultsCodeMap        = toMap(lc.get("cvv2ResultsCode"));
+            cvv2ResultsCodeMax        = lc.get("cvv2ResultsCodeMax").asInt();
+            panSourceMap              = toMap(lc.get("panSource"));
+            panSourceMax              = lc.get("panSourceMax").asInt();
+            lastLoggedInDeviceTypeMap = toMap(lc.get("lastLoggedInDeviceType"));
+            lastLoggedInDeviceTypeMax = lc.get("lastLoggedInDeviceTypeMax").asInt();
 
-            JsonNode defaults = root.get("defaults");
-            defaultHourOfDay      = (float) defaults.get("hourOfDay").asDouble();
-            defaultDayOfWeek      = (float) defaults.get("dayOfWeek").asDouble();
-            defaultIpFirstOctet   = (float) defaults.get("ipFirstOctet").asDouble();
-            defaultIpIsPrivate    = (float) defaults.get("ipIsPrivate").asDouble();
-            defaultActiveTokens   = (float) defaults.get("activeTokens").asDouble();
-            defaultSuspendedTokens = (float) defaults.get("suspendedTokens").asDouble();
-            defaultWalletHash     = (float) defaults.get("walletHash").asDouble();
-            defaultTokenRefLen    = (float) defaults.get("tokenRefLen").asDouble();
+            JsonNode hb = root.get("hashBuckets");
+            bucketsAccountHolderName      = hb.get("accountHolderName").asLong();
+            bucketsDeviceName             = hb.get("deviceName").asLong();
+            bucketsDeviceId               = hb.get("deviceId").asLong();
+            bucketsDeviceNumber           = hb.get("deviceNumber").asLong();
+            bucketsWalletReasonCodes      = hb.get("walletProviderReasonCodes").asLong();
+            bucketsDeviceLanguageCode     = hb.get("deviceLanguageCode").asLong();
+            bucketsPanReferenceId         = hb.get("panReferenceId").asLong();
+            bucketsNameOnAccount          = hb.get("nameOnAccount").asLong();
+            bucketsCardholderCountry      = hb.get("cardholderCountry").asLong();
+            bucketsLastLoggedInDeviceName = hb.get("lastLoggedInDeviceName").asLong();
+            bucketsLastLoggedInCountry    = hb.get("lastLoggedInCountry").asLong();
+            bucketsIpAddress              = hb.get("ipAddress").asLong();
+            bucketsTokenProvisionIpCountry = hb.get("tokenProvisionIpCountry").asLong();
 
-            log.info("EncodingService: mappings loaded successfully from {}", MAPPINGS_PATH);
+            JsonNode om = root.get("ordinalMax");
+            maxWalletProviderDeviceScore    = om.get("walletProviderDeviceScore").asInt();
+            maxWalletProviderAccountScore   = om.get("walletProviderAccountScore").asInt();
+            maxWalletProviderRiskAssessment = om.get("walletProviderRiskAssessment").asInt();
+            maxRiskAssessmentScore          = om.get("riskAssessmentScore").asInt();
+            maxVisaTokenScore               = om.get("visaTokenScore").asInt();
+
+            log.info("EncodingService: mappings loaded from {}", MAPPINGS_PATH);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to load encoding mappings from " + MAPPINGS_PATH, e);
         }
@@ -83,163 +140,231 @@ public class EncodingService {
 
     /**
      * Encodes a {@link TokenizationRequest} into a {@code float[]} of length
-     * {@link FeatureVector#FEATURE_COUNT} suitable for ONNX model inference.
+     * {@link FeatureVector#FEATURE_COUNT} (26) suitable for ONNX model inference.
      *
      * @param request the raw tokenization request (fields may be null)
      * @return encoded feature vector; never null
      */
     public float[] encode(TokenizationRequest request) {
-        float[] features = new float[FeatureVector.FEATURE_COUNT];
+        float[] f = new float[FeatureVector.FEATURE_COUNT];
+        DeviceInfo d = request.getDeviceInfo();
+        TokenInfo  t = request.getTokenInfo();
 
-        encodeDeviceOs(features, request.getDeviceInfo());
-        encodeTemporalFeatures(features);
-        encodeIpFeatures(features, request.getDeviceInfo());
-        encodeTokenCountFeatures(features, request.getTokenInfo());
-        encodeIdentityFeatures(features, request);
+        // 0 — account_holder_name
+        f[FeatureVector.ACCOUNT_HOLDER_NAME] =
+                hashNorm(request.getAccountHolderName(), bucketsAccountHolderName);
 
-        return features;
+        // 1 — token_requestor_id
+        f[FeatureVector.TOKEN_REQUESTOR_ID] =
+                labelNorm(request.getTokenRequestorId(), tokenRequestorIdMap, tokenRequestorIdMax,
+                          "tokenRequestorId (default OTHER=2)", 2);
+
+        // 2 — consumer_entry_mode
+        f[FeatureVector.CONSUMER_ENTRY_MODE] =
+                labelNorm(request.getConsumerEntryMode(), consumerEntryModeMap, consumerEntryModeMax,
+                          "consumerEntryMode");
+
+        // 3 — device_ip_address_v4
+        f[FeatureVector.DEVICE_IP_ADDRESS_V4] =
+                ipHashNorm(d != null ? d.getDeviceIpAddressV4() : null, bucketsIpAddress, "deviceIpAddressV4");
+
+        // 4 — wallet_provider_device_score
+        f[FeatureVector.WALLET_PROVIDER_DEVICE_SCORE] =
+                ordinalNorm(request.getWalletProviderDeviceScore(), maxWalletProviderDeviceScore,
+                            "walletProviderDeviceScore");
+
+        // 5 — device_type
+        f[FeatureVector.DEVICE_TYPE] =
+                labelNorm(d != null ? d.getDeviceType() : null, deviceTypeMap, deviceTypeMax, "deviceType");
+
+        // 6 — wallet_provider_account_score
+        f[FeatureVector.WALLET_PROVIDER_ACCOUNT_SCORE] =
+                ordinalNorm(request.getWalletProviderAccountScore(), maxWalletProviderAccountScore,
+                            "walletProviderAccountScore");
+
+        // 7 — device_name
+        f[FeatureVector.DEVICE_NAME] =
+                hashNorm(d != null ? d.getDeviceName() : null, bucketsDeviceName);
+
+        // 8 — device_id
+        f[FeatureVector.DEVICE_ID] =
+                hashNorm(d != null ? d.getDeviceId() : null, bucketsDeviceId);
+
+        // 9 — wallet_provider_risk_assessment
+        f[FeatureVector.WALLET_PROVIDER_RISK_ASSESSMENT] =
+                ordinalNorm(request.getWalletProviderRiskAssessment(), maxWalletProviderRiskAssessment,
+                            "walletProviderRiskAssessment");
+
+        // 10 — device_number
+        f[FeatureVector.DEVICE_NUMBER] =
+                hashNorm(d != null ? d.getDeviceNumber() : null, bucketsDeviceNumber);
+
+        // 11 — wallet_provider_reason_codes (hash full string, handles multi-value)
+        f[FeatureVector.WALLET_PROVIDER_REASON_CODES] =
+                hashNorm(request.getWalletProviderReasonCodes(), bucketsWalletReasonCodes);
+
+        // 12 — token_type
+        f[FeatureVector.TOKEN_TYPE] =
+                labelNorm(t != null ? t.getTokenType() : null, tokenTypeMap, tokenTypeMax, "tokenType");
+
+        // 13 — risk_assessment_score
+        f[FeatureVector.RISK_ASSESSMENT_SCORE] =
+                ordinalNorm(request.getRiskAssessmentScore(), maxRiskAssessmentScore, "riskAssessmentScore");
+
+        // 14 — device_language_code
+        f[FeatureVector.DEVICE_LANGUAGE_CODE] =
+                hashNorm(d != null ? d.getDeviceLanguageCode() : null, bucketsDeviceLanguageCode);
+
+        // 15 — pan_reference_id
+        f[FeatureVector.PAN_REFERENCE_ID] =
+                hashNorm(request.getPanReferenceId(), bucketsPanReferenceId);
+
+        // 16 — cvv2_results_code
+        f[FeatureVector.CVV2_RESULTS_CODE] =
+                labelNorm(request.getCvv2ResultsCode(), cvv2ResultsCodeMap, cvv2ResultsCodeMax, "cvv2ResultsCode");
+
+        // 17 — pan_source
+        f[FeatureVector.PAN_SOURCE] =
+                labelNorm(request.getPanSource(), panSourceMap, panSourceMax, "panSource");
+
+        // 18 — visa_token_score
+        f[FeatureVector.VISA_TOKEN_SCORE] =
+                ordinalNorm(request.getVisaTokenScore(), maxVisaTokenScore, "visaTokenScore");
+
+        // 19 — NAME_ON_ACCOUNT
+        f[FeatureVector.NAME_ON_ACCOUNT] =
+                hashNorm(request.getNameOnAccount(), bucketsNameOnAccount);
+
+        // 20 — CARDHOLDER_COUNTRY
+        f[FeatureVector.CARDHOLDER_COUNTRY] =
+                hashNorm(request.getCardholderCountry(), bucketsCardholderCountry);
+
+        // 21 — TOKEN_PROVISION_IP_COUNTRY
+        f[FeatureVector.TOKEN_PROVISION_IP_COUNTRY] =
+                hashNorm(request.getTokenProvisionIpCountry(), bucketsTokenProvisionIpCountry);
+
+        // 22 — LAST_LOGGED_IN_DEVICE_TYPE
+        f[FeatureVector.LAST_LOGGED_IN_DEVICE_TYPE] =
+                labelNorm(request.getLastLoggedInDeviceType(), lastLoggedInDeviceTypeMap,
+                          lastLoggedInDeviceTypeMax, "lastLoggedInDeviceType");
+
+        // 23 — LAST_LOGGED_IN_DEVICE_NAME
+        f[FeatureVector.LAST_LOGGED_IN_DEVICE_NAME] =
+                hashNorm(request.getLastLoggedInDeviceName(), bucketsLastLoggedInDeviceName);
+
+        // 24 — LAST_LOGGED_IN_COUNTRY
+        f[FeatureVector.LAST_LOGGED_IN_COUNTRY] =
+                hashNorm(request.getLastLoggedInCountry(), bucketsLastLoggedInCountry);
+
+        // 25 — LAST_LOGGED_IN_IP_ADDRESS
+        f[FeatureVector.LAST_LOGGED_IN_IP_ADDRESS] =
+                ipHashNorm(request.getLastLoggedInIpAddress(), bucketsIpAddress, "lastLoggedInIpAddress");
+
+        return f;
     }
 
-    // -------------------------------------------------------------------------
-    // Feature encoders
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
+    // Snowflake-compatible MD5 hash (ABS(MD5_NUMBER_LOWER64(value)) % buckets)
+    // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * One-hot encodes deviceInfo.osType into indices 0 (iOS) and 1 (Android).
-     * Any value other than "iOS" or "Android" (case-insensitive) encodes as [0, 0].
+     * Replicates Snowflake's {@code ABS(MD5_NUMBER_LOWER64(value)) % buckets}.
+     *
+     * <ol>
+     *   <li>Compute MD5 digest of the UTF-8 encoded input string.</li>
+     *   <li>Extract the lower 64 bits (last 8 bytes of the 16-byte digest).</li>
+     *   <li>Return {@code Math.abs(lower64) % buckets}.</li>
+     * </ol>
+     *
+     * @param input   the string to hash; null/blank returns 0
+     * @param buckets modulus (number of hash buckets)
+     * @return bucket index in [0, buckets)
      */
-    private void encodeDeviceOs(float[] features, DeviceInfo deviceInfo) {
-        if (deviceInfo == null || deviceInfo.getOsType() == null) {
-            features[FeatureVector.DEVICE_OS_IOS]     = 0.0f;
-            features[FeatureVector.DEVICE_OS_ANDROID] = 0.0f;
-            log.warn("EncodingService: deviceInfo.osType is null — encoding as [0, 0]");
-            return;
-        }
-
-        String os = deviceInfo.getOsType().trim();
-        if (os.equalsIgnoreCase("iOS")) {
-            features[FeatureVector.DEVICE_OS_IOS]     = 1.0f;
-            features[FeatureVector.DEVICE_OS_ANDROID] = 0.0f;
-        } else if (os.equalsIgnoreCase("Android")) {
-            features[FeatureVector.DEVICE_OS_IOS]     = 0.0f;
-            features[FeatureVector.DEVICE_OS_ANDROID] = 1.0f;
-        } else {
-            features[FeatureVector.DEVICE_OS_IOS]     = 0.0f;
-            features[FeatureVector.DEVICE_OS_ANDROID] = 0.0f;
-            log.warn("EncodingService: unrecognised osType '{}' — encoding as [0, 0]", os);
-        }
-    }
-
-    /**
-     * Extracts hour of day (UTC) and day of week from the server-side ingestion
-     * time. Uses the current UTC clock — no timestamp field from the request
-     * to avoid timezone drift between client and server.
-     * Defaults to -1.0f on any error.
-     */
-    private void encodeTemporalFeatures(float[] features) {
+    long snowflakeHash(String input, long buckets) {
+        if (isBlank(input)) return 0L;
         try {
-            ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-            features[FeatureVector.HOUR_OF_DAY] = (float) now.getHour();
-            features[FeatureVector.DAY_OF_WEEK] = (float) now.getDayOfWeek().getValue(); // 1=Mon, 7=Sun
-        } catch (Exception e) {
-            log.warn("EncodingService: failed to extract temporal features — applying defaults", e);
-            features[FeatureVector.HOUR_OF_DAY] = defaultHourOfDay;
-            features[FeatureVector.DAY_OF_WEEK] = defaultDayOfWeek;
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            // Lower 64 bits = last 8 bytes of the 16-byte MD5 array
+            long lower64 = ByteBuffer.wrap(digest, 8, 8).getLong();
+            return Math.abs(lower64) % buckets;
+        } catch (NoSuchAlgorithmException e) {
+            log.error("EncodingService: MD5 not available — returning 0", e);
+            return 0L;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Encoding helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Hash a text field and normalise by the bucket count. */
+    private float hashNorm(String value, long buckets) {
+        return snowflakeHash(value, buckets) / (float) buckets;
     }
 
     /**
-     * Derives ip_first_octet and ip_is_private from deviceInfo.deviceIpAddressV4.
-     * RFC-1918 private ranges: 10.x.x.x, 172.16–31.x.x, 192.168.x.x.
-     * Defaults to 0.0f for both if IP is null or malformed.
+     * Hash the first 3 octets of an IPv4 address and normalise.
+     * E.g. "192.168.1.55" → hash("192.168.1") % buckets / buckets.
      */
-    private void encodeIpFeatures(float[] features, DeviceInfo deviceInfo) {
-        if (deviceInfo == null || isBlank(deviceInfo.getDeviceIpAddressV4())) {
-            features[FeatureVector.IP_FIRST_OCTET] = defaultIpFirstOctet;
-            features[FeatureVector.IP_IS_PRIVATE]  = defaultIpIsPrivate;
-            log.warn("EncodingService: deviceIpAddressV4 is null/blank — applying defaults");
-            return;
+    private float ipHashNorm(String ip, long buckets, String fieldName) {
+        if (isBlank(ip)) {
+            log.warn("EncodingService: {} is null/blank — default 0.0", fieldName);
+            return 0.0f;
         }
-
-        String ip = deviceInfo.getDeviceIpAddressV4().trim();
-        String[] octets = ip.split("\\.");
-
-        if (octets.length != 4) {
-            features[FeatureVector.IP_FIRST_OCTET] = defaultIpFirstOctet;
-            features[FeatureVector.IP_IS_PRIVATE]  = defaultIpIsPrivate;
-            log.warn("EncodingService: malformed IPv4 '{}' — applying defaults", ip);
-            return;
+        String[] parts = ip.trim().split("\\.");
+        if (parts.length < 3) {
+            log.warn("EncodingService: malformed IPv4 '{}' for {} — default 0.0", ip, fieldName);
+            return 0.0f;
         }
-
-        try {
-            int firstOctet  = Integer.parseInt(octets[0]);
-            int secondOctet = Integer.parseInt(octets[1]);
-
-            features[FeatureVector.IP_FIRST_OCTET] = (float) firstOctet;
-            features[FeatureVector.IP_IS_PRIVATE]  = isPrivateIp(firstOctet, secondOctet) ? 1.0f : 0.0f;
-        } catch (NumberFormatException e) {
-            features[FeatureVector.IP_FIRST_OCTET] = defaultIpFirstOctet;
-            features[FeatureVector.IP_IS_PRIVATE]  = defaultIpIsPrivate;
-            log.warn("EncodingService: could not parse IP octets from '{}' — applying defaults", ip);
-        }
+        String first3 = parts[0] + "." + parts[1] + "." + parts[2];
+        return snowflakeHash(first3, buckets) / (float) buckets;
     }
 
-    /**
-     * Normalises active and suspended token counts from tokenInfo.
-     * Formula: min(count, cap) / cap. Defaults to 0.0f if tokenInfo or field is null.
-     */
-    private void encodeTokenCountFeatures(float[] features, TokenInfo tokenInfo) {
-        if (tokenInfo == null) {
-            features[FeatureVector.NUM_ACTIVE_TOKENS_NORM]    = defaultActiveTokens;
-            features[FeatureVector.NUM_SUSPENDED_TOKENS_NORM] = defaultSuspendedTokens;
-            log.warn("EncodingService: tokenInfo is null — applying token count defaults");
-            return;
-        }
-
-        features[FeatureVector.NUM_ACTIVE_TOKENS_NORM] = tokenInfo.getNumberOfActiveTokensForPAN() != null
-                ? Math.min(tokenInfo.getNumberOfActiveTokensForPAN(), activeTokensMax) / (float) activeTokensMax
-                : defaultActiveTokens;
-
-        features[FeatureVector.NUM_SUSPENDED_TOKENS_NORM] = tokenInfo.getNumberOfSuspendedTokensForPAN() != null
-                ? Math.min(tokenInfo.getNumberOfSuspendedTokensForPAN(), suspendedTokensMax) / (float) suspendedTokensMax
-                : defaultSuspendedTokens;
+    /** Look up a label in a map, normalise by max. Unknown values default to 0. */
+    private float labelNorm(String value, Map<String, Integer> map, int max, String fieldName) {
+        return labelNorm(value, map, max, fieldName, 0);
     }
 
-    /**
-     * Encodes clientWalletAccountId hash and tokenReferenceId length.
-     * Defaults to 0.0f if the respective field is null or blank.
-     */
-    private void encodeIdentityFeatures(float[] features, TokenizationRequest request) {
-        // Client wallet account hash norm
-        if (isBlank(request.getClientWalletAccountId())) {
-            features[FeatureVector.CLIENT_WALLET_ACCOUNT_HASH_NORM] = defaultWalletHash;
-            log.warn("EncodingService: clientWalletAccountId is null/blank — applying default");
-        } else {
-            int hash = Math.abs(request.getClientWalletAccountId().hashCode()) % walletAccountHashMod;
-            features[FeatureVector.CLIENT_WALLET_ACCOUNT_HASH_NORM] = hash / (float) walletAccountHashMod;
+    private float labelNorm(String value, Map<String, Integer> map, int max, String fieldName, int unknownLabel) {
+        if (isBlank(value)) {
+            log.warn("EncodingService: {} is null/blank — default {}", fieldName, unknownLabel / (float) max);
+            return unknownLabel / (float) max;
         }
-
-        // Token reference ID length norm
-        if (isBlank(request.getTokenReferenceId())) {
-            features[FeatureVector.TOKEN_REFERENCE_ID_LEN_NORM] = defaultTokenRefLen;
-            log.warn("EncodingService: tokenReferenceId is null/blank — applying default");
-        } else {
-            int len = Math.min(request.getTokenReferenceId().length(), tokenRefIdLenMax);
-            features[FeatureVector.TOKEN_REFERENCE_ID_LEN_NORM] = len / (float) tokenRefIdLenMax;
+        Integer label = map.get(value.trim().toUpperCase());
+        if (label == null) {
+            // Try exact case match before giving up
+            label = map.get(value.trim());
         }
+        if (label == null) {
+            log.warn("EncodingService: unknown value '{}' for {} — default {}", value, fieldName, unknownLabel / (float) max);
+            return unknownLabel / (float) max;
+        }
+        return label / (float) max;
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    private boolean isPrivateIp(int first, int second) {
-        return first == 10
-                || first == 192 && second == 168
-                || first == 172 && second >= 16 && second <= 31;
+    /** Normalise an ordinal integer by its declared max value. Null defaults to 0. */
+    private float ordinalNorm(Integer value, int max, String fieldName) {
+        if (value == null) {
+            log.warn("EncodingService: {} is null — default 0.0", fieldName);
+            return 0.0f;
+        }
+        return value / (float) max;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Utilities
+    // ─────────────────────────────────────────────────────────────────────────
 
     private boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private Map<String, Integer> toMap(JsonNode node) {
+        Map<String, Integer> map = new HashMap<>();
+        if (node != null) {
+            node.fields().forEachRemaining(e -> map.put(e.getKey(), e.getValue().asInt()));
+        }
+        return map;
     }
 }
