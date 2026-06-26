@@ -165,20 +165,21 @@ OUTPUT_PATH = os.path.normpath(
 # ---------------------------------------------------------------------------
 
 W_fraud = [0.0] * FEATURE_COUNT
-W_fraud[14] = -0.5   # wallet_provider_device_score
-W_fraud[15] = -0.4   # wallet_provider_account_score
-W_fraud[16] =  0.8   # wallet_provider_risk_assessment
-W_fraud[17] =  0.6   # risk_assessment_score
-W_fraud[18] =  0.5   # visa_token_score
-W_fraud[20] = -0.1   # token_requestor is_GOOGLE
-W_fraud[33] = -0.2   # token_type is_SECURE_ELEMENT
-W_fraud[34] =  0.2   # token_type is_HCE
-W_fraud[38] = -0.3   # cvv2 is_M (match = good)
-W_fraud[39] =  0.3   # cvv2 is_N (no match = bad)
-W_fraud[42] =  0.5   # cvv2 is_U (unavailable = bad)
-W_fraud[44] =  0.3   # pan_source is_KEY_ENTERED
-W_fraud[46] = -0.2   # pan_source is_MOBILE_BANKING_APP
-W_fraud[51] =  0.1   # last_login is_Android
+# New index positions follow DataPoints Definition sheet row order:
+W_fraud[2]  = -0.1   # token_requestor is_GOOGLE (known requestor = safer)
+W_fraud[7]  = -0.5   # wallet_provider_device_score (low = untrusted device)
+W_fraud[17] = -0.4   # wallet_provider_account_score (low = untrusted account)
+W_fraud[20] =  0.8   # wallet_provider_risk_assessment (step-up = suspicious)
+W_fraud[23] = -0.2   # token_type is_SECURE_ELEMENT (hardware = safer)
+W_fraud[24] =  0.2   # token_type is_HCE (software token = riskier)
+W_fraud[28] =  0.6   # risk_assessment_score (high = bad)
+W_fraud[31] = -0.3   # cvv2 is_M (match = good)
+W_fraud[32] =  0.3   # cvv2 is_N (no match = bad)
+W_fraud[35] =  0.5   # cvv2 is_U (unavailable = bad)
+W_fraud[37] =  0.3   # pan_source is_KEY_ENTERED (manual = riskier)
+W_fraud[39] = -0.2   # pan_source is_MOBILE_BANKING_APP (safer)
+W_fraud[43] =  0.5   # visa_token_score (high = bad)
+W_fraud[48] =  0.1   # last_login is_Android (slight signal)
 
 W_legit = [-w for w in W_fraud]
 B_legit, B_fraud = 0.1, -0.1

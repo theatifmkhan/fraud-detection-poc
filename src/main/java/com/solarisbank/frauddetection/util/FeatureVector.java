@@ -4,259 +4,224 @@ package com.solarisbank.frauddetection.util;
  * Canonical feature vector definition for the fraud detection ONNX model.
  *
  * Defines the strict index order of all 53 features in the float[] array
- * passed to ModelInferenceService. This contract must match the column order
- * used during Snowflake data export and SageMaker model training exactly.
+ * passed to ModelInferenceService.
  *
  * Feature vector length: {@value FEATURE_COUNT}
  *
- * Source document: Shack.xlsx — "DataPoints Definition" sheet (26 data points).
+ * ── IMPORTANT: Column ordering contract ──────────────────────────────────────
+ * The index order MUST match the column order in the Snowflake training data
+ * export, which follows the DataPoints Definition sheet in Shack.xlsx row by row.
+ * One-hot expanded columns for a given field appear immediately after their
+ * source row's position in the sheet.
+ *
+ * See also: Shack.xlsx → "Model Training Columns" sheet for the exact
+ * Snowflake SQL expressions and training column names.
  *
  * ── Encoding strategy by data type ──────────────────────────────────────────
- *
  *   High-Cardinality / Free Text  → Snowflake MD5 hash
  *     ABS(MD5_NUMBER_LOWER64(value)) % buckets, normalised by /buckets.
- *     Single float per field. Default 0.0f when null/blank.
+ *     Default 0.0f when null/blank.
  *
  *   IP Address                    → MD5 hash of first 3 octets, 10000 buckets.
- *     E.g. "192.168.1.55" → MD5("192.168.1") % 10000 / 10000.
  *
- *   Ordinal                       → raw integer / declared max.
- *     Default 0.0f when null.
+ *   Ordinal                       → raw integer / declared max. Default 0.0f.
  *
  *   Low-Cardinality (nominal)     → one-hot encoding.
  *     One binary float (1.0f or 0.0f) per category value.
- *     All zeros when value is null, blank, or unrecognised.
- *     Avoids the false ordinal relationship introduced by label encoding.
+ *     All zeros when null, blank, or unrecognised.
  *
- *   wallet_provider_reason_codes  → Snowflake MD5 hash % 100 (kept as single
- *     feature; multi-value field — one-hot expansion deferred for later).
- *
- * ─────────────────────────────────────────────────────────────────────────────
- * Index layout:
- *   0–13  High-cardinality / free-text hash features    (14 features)
- *  14–18  Ordinal features                              ( 5 features)
- *  19–20  One-hot: token_requestor_id                   ( 2 features)
- *  21–23  One-hot: consumer_entry_mode                  ( 3 features)
- *  24–32  One-hot: device_type                          ( 9 features)
- *  33–37  One-hot: token_type                           ( 5 features)
- *  38–43  One-hot: cvv2_results_code                    ( 6 features)
- *  44–49  One-hot: pan_source                           ( 6 features)
- *  50–52  One-hot: LAST_LOGGED_IN_DEVICE_TYPE           ( 3 features)
+ *   wallet_provider_reason_codes  → MD5 hash % 100 (multi-value; deferred).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 public final class FeatureVector {
 
     private FeatureVector() {}
 
-    /** Total number of features. Must match the ONNX model input shape [1, FEATURE_COUNT]. */
+    /** Total features. Must match ONNX model input shape [1, FEATURE_COUNT]. */
     public static final int FEATURE_COUNT = 53;
 
-    // =========================================================================
-    // HIGH-CARDINALITY / FREE-TEXT HASH FEATURES  (indices 0–13)
-    // Encoding: Snowflake MD5 lower-64-bit hash % buckets, normalised by /buckets
-    // =========================================================================
-
-    /** Index 0  | account_holder_name    | MD5 % 1000 / 1000  | src: accountHolderName */
+    // ── Row 1: account_holder_name ───────────────────────────────────────────
+    /** Index 0  | account_holder_name | MD5 % 1000 / 1000 | src: accountHolderName */
     public static final int ACCOUNT_HOLDER_NAME = 0;
 
-    /** Index 1  | device_ip_address_v4   | MD5(3 octets) % 10000 / 10000 | src: deviceInfo.deviceIpAddressV4 */
-    public static final int DEVICE_IP_ADDRESS_V4 = 1;
+    // ── Row 2: token_requestor_id (one-hot) ──────────────────────────────────
+    /** Index 1  | token_requestor_is_apple  | src: tokenRequestorId */
+    public static final int TOKEN_REQUESTOR_IS_APPLE = 1;
 
-    /** Index 2  | device_name            | MD5 % 1000 / 1000  | src: deviceInfo.deviceName */
-    public static final int DEVICE_NAME = 2;
+    /** Index 2  | token_requestor_is_google | src: tokenRequestorId */
+    public static final int TOKEN_REQUESTOR_IS_GOOGLE = 2;
 
-    /** Index 3  | device_id              | MD5 % 1000 / 1000  | src: deviceInfo.deviceId */
-    public static final int DEVICE_ID = 3;
+    // ── Row 3: consumer_entry_mode (one-hot) ──────────────────────────────────
+    /** Index 3  | consumer_entry_is_key_entered     | src: consumerEntryMode */
+    public static final int CONSUMER_ENTRY_IS_KEY_ENTERED = 3;
 
-    /** Index 4  | device_number          | MD5 % 1000 / 1000  | src: deviceInfo.deviceNumber */
-    public static final int DEVICE_NUMBER = 4;
+    /** Index 4  | consumer_entry_is_camera_captured | src: consumerEntryMode */
+    public static final int CONSUMER_ENTRY_IS_CAMERA_CAPTURED = 4;
 
-    /**
-     * Index 5  | wallet_provider_reason_codes | MD5 of full string % 100 / 100
-     * Multi-value field (e.g. "01,A5,0G") — kept as single hash feature for now.
-     * src: walletProviderReasonCodes
-     */
-    public static final int WALLET_PROVIDER_REASON_CODES = 5;
+    /** Index 5  | consumer_entry_is_unknown         | src: consumerEntryMode */
+    public static final int CONSUMER_ENTRY_IS_UNKNOWN = 5;
 
-    /** Index 6  | device_language_code   | MD5 % 1000 / 1000  | src: deviceInfo.deviceLanguageCode */
-    public static final int DEVICE_LANGUAGE_CODE = 6;
+    // ── Row 4: device_ip_address_v4 ───────────────────────────────────────────
+    /** Index 6  | device_ip_address_v4 | MD5(3 octets) % 10000 / 10000 | src: deviceInfo.deviceIpAddressV4 */
+    public static final int DEVICE_IP_ADDRESS_V4 = 6;
 
-    /** Index 7  | pan_reference_id       | MD5 % 1000 / 1000  | src: panReferenceId */
-    public static final int PAN_REFERENCE_ID = 7;
+    // ── Row 5: wallet_provider_device_score ───────────────────────────────────
+    /** Index 7  | wallet_provider_device_score | Ordinal 1–5 / 5 | src: walletProviderDeviceScore */
+    public static final int WALLET_PROVIDER_DEVICE_SCORE = 7;
 
-    /** Index 8  | NAME_ON_ACCOUNT        | MD5 % 1000 / 1000  | src: nameOnAccount */
-    public static final int NAME_ON_ACCOUNT = 8;
+    // ── Row 6: device_type (one-hot, 9 values) ────────────────────────────────
+    /** Index 8  | device_type_is_unknown               | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_UNKNOWN = 8;
 
-    /** Index 9  | CARDHOLDER_COUNTRY     | MD5 % 1000 / 1000  | src: cardholderCountry */
-    public static final int CARDHOLDER_COUNTRY = 9;
+    /** Index 9  | device_type_is_mobile_phone          | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_MOBILE_PHONE = 9;
 
-    /** Index 10 | TOKEN_PROVISION_IP_COUNTRY | MD5 % 10000 / 10000 | src: tokenProvisionIpCountry */
-    public static final int TOKEN_PROVISION_IP_COUNTRY = 10;
+    /** Index 10 | device_type_is_tablet                | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_TABLET = 10;
 
-    /** Index 11 | LAST_LOGGED_IN_DEVICE_NAME | MD5 % 1000 / 1000  | src: lastLoggedInDeviceName */
-    public static final int LAST_LOGGED_IN_DEVICE_NAME = 11;
+    /** Index 11 | device_type_is_watch                 | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_WATCH = 11;
 
-    /** Index 12 | LAST_LOGGED_IN_COUNTRY | MD5 % 1000 / 1000  | src: lastLoggedInCountry */
-    public static final int LAST_LOGGED_IN_COUNTRY = 12;
+    /** Index 12 | device_type_is_mobilephone_or_tablet | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_MOBILEPHONE_OR_TABLET = 12;
 
-    /** Index 13 | LAST_LOGGED_IN_IP_ADDRESS | MD5(3 octets) % 10000 / 10000 | src: lastLoggedInIpAddress */
-    public static final int LAST_LOGGED_IN_IP_ADDRESS = 13;
+    /** Index 13 | device_type_is_pc                    | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_PC = 13;
 
-    // =========================================================================
-    // ORDINAL FEATURES  (indices 14–18)
-    // Encoding: raw integer / declared max. Default 0.0f when null.
-    // =========================================================================
+    /** Index 14 | device_type_is_household_device      | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_HOUSEHOLD_DEVICE = 14;
 
-    /** Index 14 | wallet_provider_device_score    | Ordinal 1–5 / 5 | src: walletProviderDeviceScore */
-    public static final int WALLET_PROVIDER_DEVICE_SCORE = 14;
+    /** Index 15 | device_type_is_wearable_device       | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_WEARABLE_DEVICE = 15;
 
-    /** Index 15 | wallet_provider_account_score   | Ordinal 1–5 / 5 | src: walletProviderAccountScore */
-    public static final int WALLET_PROVIDER_ACCOUNT_SCORE = 15;
+    /** Index 16 | device_type_is_automobile_device     | src: deviceInfo.deviceType */
+    public static final int DEVICE_TYPE_IS_AUTOMOBILE_DEVICE = 16;
 
-    /** Index 16 | wallet_provider_risk_assessment | Ordinal 0–2 / 2 | src: walletProviderRiskAssessment */
-    public static final int WALLET_PROVIDER_RISK_ASSESSMENT = 16;
+    // ── Row 7: wallet_provider_account_score ──────────────────────────────────
+    /** Index 17 | wallet_provider_account_score | Ordinal 1–5 / 5 | src: walletProviderAccountScore */
+    public static final int WALLET_PROVIDER_ACCOUNT_SCORE = 17;
 
-    /** Index 17 | risk_assessment_score           | Ordinal 1–5 / 5 | src: riskAssessmentScore */
-    public static final int RISK_ASSESSMENT_SCORE = 17;
+    // ── Row 8: device_name ────────────────────────────────────────────────────
+    /** Index 18 | device_name | MD5 % 1000 / 1000 | src: deviceInfo.deviceName */
+    public static final int DEVICE_NAME = 18;
 
-    /** Index 18 | visa_token_score                | Ordinal 1–5 / 5 | src: visaTokenScore */
-    public static final int VISA_TOKEN_SCORE = 18;
+    // ── Row 9: device_id ──────────────────────────────────────────────────────
+    /** Index 19 | device_id | MD5 % 1000 / 1000 | src: deviceInfo.deviceId */
+    public static final int DEVICE_ID = 19;
 
-    // =========================================================================
-    // ONE-HOT: token_requestor_id  (indices 19–20)
-    // Values: APPLE, GOOGLE  — both 0 means OTHER / unknown
-    // =========================================================================
+    // ── Row 10: wallet_provider_risk_assessment ───────────────────────────────
+    /** Index 20 | wallet_provider_risk_assessment | Ordinal 0–2 / 2 | src: walletProviderRiskAssessment */
+    public static final int WALLET_PROVIDER_RISK_ASSESSMENT = 20;
 
-    /** Index 19 | is_APPLE  | 1.0f if tokenRequestorId == "APPLE"  | src: tokenRequestorId */
-    public static final int TOKEN_REQUESTOR_IS_APPLE = 19;
+    // ── Row 11: device_number ─────────────────────────────────────────────────
+    /** Index 21 | device_number | MD5 % 1000 / 1000 | src: deviceInfo.deviceNumber */
+    public static final int DEVICE_NUMBER = 21;
 
-    /** Index 20 | is_GOOGLE | 1.0f if tokenRequestorId == "GOOGLE" | src: tokenRequestorId */
-    public static final int TOKEN_REQUESTOR_IS_GOOGLE = 20;
+    // ── Row 12: wallet_provider_reason_codes ──────────────────────────────────
+    /** Index 22 | wallet_provider_reason_codes | MD5 % 100 / 100 (multi-value, deferred) | src: walletProviderReasonCodes */
+    public static final int WALLET_PROVIDER_REASON_CODES = 22;
 
-    // =========================================================================
-    // ONE-HOT: consumer_entry_mode  (indices 21–23)
-    // Values: KEY_ENTERED, CAMERA_CAPTURED, UNKNOWN
-    // =========================================================================
+    // ── Row 13: token_type (one-hot, 5 values) ────────────────────────────────
+    /** Index 23 | token_type_is_secure_element | src: tokenInfo.tokenType */
+    public static final int TOKEN_TYPE_IS_SECURE_ELEMENT = 23;
 
-    /** Index 21 | is_KEY_ENTERED      | src: consumerEntryMode */
-    public static final int CONSUMER_ENTRY_IS_KEY_ENTERED = 21;
+    /** Index 24 | token_type_is_hce            | src: tokenInfo.tokenType */
+    public static final int TOKEN_TYPE_IS_HCE = 24;
 
-    /** Index 22 | is_CAMERA_CAPTURED  | src: consumerEntryMode */
-    public static final int CONSUMER_ENTRY_IS_CAMERA_CAPTURED = 22;
+    /** Index 25 | token_type_is_card_on_file   | src: tokenInfo.tokenType */
+    public static final int TOKEN_TYPE_IS_CARD_ON_FILE = 25;
 
-    /** Index 23 | is_UNKNOWN          | src: consumerEntryMode */
-    public static final int CONSUMER_ENTRY_IS_UNKNOWN = 23;
+    /** Index 26 | token_type_is_ecommerce      | src: tokenInfo.tokenType */
+    public static final int TOKEN_TYPE_IS_ECOMMERCE = 26;
 
-    // =========================================================================
-    // ONE-HOT: device_type  (indices 24–32)
-    // Values: UNKNOWN, MOBILE_PHONE, TABLET, WATCH, MOBILEPHONE_OR_TABLET,
-    //         PC, HOUSEHOLD_DEVICE, WEARABLE_DEVICE, AUTOMOBILE_DEVICE
-    // =========================================================================
+    /** Index 27 | token_type_is_qrc            | src: tokenInfo.tokenType */
+    public static final int TOKEN_TYPE_IS_QRC = 27;
 
-    /** Index 24 | is_UNKNOWN                | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_UNKNOWN = 24;
+    // ── Row 14: risk_assessment_score ─────────────────────────────────────────
+    /** Index 28 | risk_assessment_score | Ordinal 1–5 / 5 | src: riskAssessmentScore */
+    public static final int RISK_ASSESSMENT_SCORE = 28;
 
-    /** Index 25 | is_MOBILE_PHONE           | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_MOBILE_PHONE = 25;
+    // ── Row 15: device_language_code ──────────────────────────────────────────
+    /** Index 29 | device_language_code | MD5 % 1000 / 1000 | src: deviceInfo.deviceLanguageCode */
+    public static final int DEVICE_LANGUAGE_CODE = 29;
 
-    /** Index 26 | is_TABLET                 | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_TABLET = 26;
+    // ── Row 16: pan_reference_id ──────────────────────────────────────────────
+    /** Index 30 | pan_reference_id | MD5 % 1000 / 1000 | src: panReferenceId */
+    public static final int PAN_REFERENCE_ID = 30;
 
-    /** Index 27 | is_WATCH                  | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_WATCH = 27;
+    // ── Row 17: cvv2_results_code (one-hot, 6 values) ─────────────────────────
+    /** Index 31 | cvv2_is_m    — Match             | src: cvv2ResultsCode */
+    public static final int CVV2_IS_M = 31;
 
-    /** Index 28 | is_MOBILEPHONE_OR_TABLET  | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_MOBILEPHONE_OR_TABLET = 28;
+    /** Index 32 | cvv2_is_n    — No match          | src: cvv2ResultsCode */
+    public static final int CVV2_IS_N = 32;
 
-    /** Index 29 | is_PC                     | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_PC = 29;
+    /** Index 33 | cvv2_is_p    — Not processed     | src: cvv2ResultsCode */
+    public static final int CVV2_IS_P = 33;
 
-    /** Index 30 | is_HOUSEHOLD_DEVICE       | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_HOUSEHOLD_DEVICE = 30;
+    /** Index 34 | cvv2_is_s    — Should be present | src: cvv2ResultsCode */
+    public static final int CVV2_IS_S = 34;
 
-    /** Index 31 | is_WEARABLE_DEVICE        | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_WEARABLE_DEVICE = 31;
+    /** Index 35 | cvv2_is_u    — Unavailable       | src: cvv2ResultsCode */
+    public static final int CVV2_IS_U = 35;
 
-    /** Index 32 | is_AUTOMOBILE_DEVICE      | src: deviceInfo.deviceType */
-    public static final int DEVICE_TYPE_IS_AUTOMOBILE_DEVICE = 32;
+    /** Index 36 | cvv2_is_null — Not provided      | src: cvv2ResultsCode */
+    public static final int CVV2_IS_NULL = 36;
 
-    // =========================================================================
-    // ONE-HOT: token_type  (indices 33–37)
-    // Values: SECURE_ELEMENT, HCE, CARD_ON_FILE, ECOMMERCE, QRC
-    // =========================================================================
+    // ── Row 18: pan_source (one-hot, 6 values) ────────────────────────────────
+    /** Index 37 | pan_source_is_key_entered        | src: panSource */
+    public static final int PAN_SOURCE_IS_KEY_ENTERED = 37;
 
-    /** Index 33 | is_SECURE_ELEMENT  | src: tokenInfo.tokenType */
-    public static final int TOKEN_TYPE_IS_SECURE_ELEMENT = 33;
+    /** Index 38 | pan_source_is_on_file            | src: panSource */
+    public static final int PAN_SOURCE_IS_ON_FILE = 38;
 
-    /** Index 34 | is_HCE             | src: tokenInfo.tokenType */
-    public static final int TOKEN_TYPE_IS_HCE = 34;
+    /** Index 39 | pan_source_is_mobile_banking_app | src: panSource */
+    public static final int PAN_SOURCE_IS_MOBILE_BANKING_APP = 39;
 
-    /** Index 35 | is_CARD_ON_FILE    | src: tokenInfo.tokenType */
-    public static final int TOKEN_TYPE_IS_CARD_ON_FILE = 35;
+    /** Index 40 | pan_source_is_token              | src: panSource */
+    public static final int PAN_SOURCE_IS_TOKEN = 40;
 
-    /** Index 36 | is_ECOMMERCE       | src: tokenInfo.tokenType */
-    public static final int TOKEN_TYPE_IS_ECOMMERCE = 36;
+    /** Index 41 | pan_source_is_chip_dip           | src: panSource */
+    public static final int PAN_SOURCE_IS_CHIP_DIP = 41;
 
-    /** Index 37 | is_QRC             | src: tokenInfo.tokenType */
-    public static final int TOKEN_TYPE_IS_QRC = 37;
+    /** Index 42 | pan_source_is_contactless_tap    | src: panSource */
+    public static final int PAN_SOURCE_IS_CONTACTLESS_TAP = 42;
 
-    // =========================================================================
-    // ONE-HOT: cvv2_results_code  (indices 38–43)
-    // Values: M, N, P, S, U, NULL
-    // =========================================================================
+    // ── Row 19: visa_token_score ──────────────────────────────────────────────
+    /** Index 43 | visa_token_score | Ordinal 1–5 / 5 | src: visaTokenScore */
+    public static final int VISA_TOKEN_SCORE = 43;
 
-    /** Index 38 | is_M    — Match              | src: cvv2ResultsCode */
-    public static final int CVV2_IS_M = 38;
+    // ── Row 20: NAME_ON_ACCOUNT ───────────────────────────────────────────────
+    /** Index 44 | name_on_account | MD5 % 1000 / 1000 | src: nameOnAccount */
+    public static final int NAME_ON_ACCOUNT = 44;
 
-    /** Index 39 | is_N    — No match           | src: cvv2ResultsCode */
-    public static final int CVV2_IS_N = 39;
+    // ── Row 21: CARDHOLDER_COUNTRY ────────────────────────────────────────────
+    /** Index 45 | cardholder_country | MD5 % 1000 / 1000 | src: cardholderCountry */
+    public static final int CARDHOLDER_COUNTRY = 45;
 
-    /** Index 40 | is_P    — Not processed      | src: cvv2ResultsCode */
-    public static final int CVV2_IS_P = 40;
+    // ── Row 22: TOKEN_PROVISION_IP_COUNTRY ────────────────────────────────────
+    /** Index 46 | token_provision_ip_country | MD5 % 10000 / 10000 | src: tokenProvisionIpCountry */
+    public static final int TOKEN_PROVISION_IP_COUNTRY = 46;
 
-    /** Index 41 | is_S    — Should be present  | src: cvv2ResultsCode */
-    public static final int CVV2_IS_S = 41;
+    // ── Row 23: LAST_LOGGED_IN_DEVICE_TYPE (one-hot, 3 values) ───────────────
+    /** Index 47 | last_login_device_is_ios     | src: lastLoggedInDeviceType */
+    public static final int LAST_LOGIN_DEVICE_IS_IOS = 47;
 
-    /** Index 42 | is_U    — Unavailable        | src: cvv2ResultsCode */
-    public static final int CVV2_IS_U = 42;
+    /** Index 48 | last_login_device_is_android | src: lastLoggedInDeviceType */
+    public static final int LAST_LOGIN_DEVICE_IS_ANDROID = 48;
 
-    /** Index 43 | is_NULL — Not provided       | src: cvv2ResultsCode */
-    public static final int CVV2_IS_NULL = 43;
+    /** Index 49 | last_login_device_is_web     | src: lastLoggedInDeviceType */
+    public static final int LAST_LOGIN_DEVICE_IS_WEB = 49;
 
-    // =========================================================================
-    // ONE-HOT: pan_source  (indices 44–49)
-    // Values: KEY_ENTERED, ON_FILE, MOBILE_BANKING_APP, TOKEN, CHIP_DIP, CONTACTLESS_TAP
-    // =========================================================================
+    // ── Row 24: LAST_LOGGED_IN_DEVICE_NAME ───────────────────────────────────
+    /** Index 50 | last_logged_in_device_name | MD5 % 1000 / 1000 | src: lastLoggedInDeviceName */
+    public static final int LAST_LOGGED_IN_DEVICE_NAME = 50;
 
-    /** Index 44 | is_KEY_ENTERED        | src: panSource */
-    public static final int PAN_SOURCE_IS_KEY_ENTERED = 44;
+    // ── Row 25: LAST_LOGGED_IN_COUNTRY ────────────────────────────────────────
+    /** Index 51 | last_logged_in_country | MD5 % 1000 / 1000 | src: lastLoggedInCountry */
+    public static final int LAST_LOGGED_IN_COUNTRY = 51;
 
-    /** Index 45 | is_ON_FILE            | src: panSource */
-    public static final int PAN_SOURCE_IS_ON_FILE = 45;
-
-    /** Index 46 | is_MOBILE_BANKING_APP | src: panSource */
-    public static final int PAN_SOURCE_IS_MOBILE_BANKING_APP = 46;
-
-    /** Index 47 | is_TOKEN              | src: panSource */
-    public static final int PAN_SOURCE_IS_TOKEN = 47;
-
-    /** Index 48 | is_CHIP_DIP           | src: panSource */
-    public static final int PAN_SOURCE_IS_CHIP_DIP = 48;
-
-    /** Index 49 | is_CONTACTLESS_TAP    | src: panSource */
-    public static final int PAN_SOURCE_IS_CONTACTLESS_TAP = 49;
-
-    // =========================================================================
-    // ONE-HOT: LAST_LOGGED_IN_DEVICE_TYPE  (indices 50–52)
-    // Values: iOS, Android, Web
-    // =========================================================================
-
-    /** Index 50 | is_iOS     | src: lastLoggedInDeviceType */
-    public static final int LAST_LOGIN_DEVICE_IS_IOS = 50;
-
-    /** Index 51 | is_Android | src: lastLoggedInDeviceType */
-    public static final int LAST_LOGIN_DEVICE_IS_ANDROID = 51;
-
-    /** Index 52 | is_Web     | src: lastLoggedInDeviceType */
-    public static final int LAST_LOGIN_DEVICE_IS_WEB = 52;
+    // ── Row 26: LAST_LOGGED_IN_IP_ADDRESS ─────────────────────────────────────
+    /** Index 52 | last_logged_in_ip_address | MD5(3 octets) % 10000 / 10000 | src: lastLoggedInIpAddress */
+    public static final int LAST_LOGGED_IN_IP_ADDRESS = 52;
 }
