@@ -385,7 +385,12 @@
 
       <!-- Score Card -->
       <div class="bg-slate-900 border border-slate-800 rounded-lg p-5 flex flex-col gap-4">
-        <p class="text-xs uppercase text-indigo-400 tracking-widest">ML Fraud Score</p>
+        <div class="flex items-center justify-between">
+          <p class="text-xs uppercase text-indigo-400 tracking-widest">ML Fraud Score</p>
+          <span id="latencyBadge" class="hidden text-xs text-slate-400 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 tabular-nums">
+            ⏱ <span id="latencyValue">—</span>
+          </span>
+        </div>
 
         <!-- Score number -->
         <div class="flex items-end gap-3">
@@ -572,7 +577,7 @@
     }
   }
 
-  function renderResults(data) {
+  function renderResults(data, latencyMs) {
     const score    = data.score;
     const decision = data.decision;
     const explain  = data.aiExplanation;
@@ -581,6 +586,16 @@
     idleState.classList.add('hidden');
     resultsState.classList.remove('hidden');
     errorCard.classList.add('hidden');
+
+    // Latency badge
+    if (latencyMs !== undefined) {
+      const badge = document.getElementById('latencyBadge');
+      const label = document.getElementById('latencyValue');
+      label.textContent = latencyMs >= 1000
+        ? `${(latencyMs / 1000).toFixed(2)} s`
+        : `${latencyMs} ms`;
+      badge.classList.remove('hidden');
+    }
 
     // Score gauge
     const pct = Math.min(Math.max(score, 0), 1) * 100;
@@ -670,6 +685,7 @@
 
     try {
       const payload = buildPayload();
+      const t0 = performance.now();
       const res = await fetch(API_URL, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -682,7 +698,8 @@
       }
 
       const data = await res.json();
-      renderResults(data);
+      const latencyMs = Math.round(performance.now() - t0);
+      renderResults(data, latencyMs);
 
     } catch (err) {
       renderError(err.message);
