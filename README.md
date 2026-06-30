@@ -5,7 +5,7 @@ A proof-of-concept application that evaluates incoming card tokenization provisi
 - **Path A — ONNX ML Inference:** A compiled XGBoost/RandomForest classifier runs sub-millisecond fraud probability scoring on every request
 - **Path B — Amazon Bedrock RAG:** For high-risk decisions, an LLM (via Amazon Bedrock Converse API) generates a natural-language Analyst Audit Report grounded in internal fraud policy documents
 
-The request schema mirrors the real Visa `approveProvisioning` API used in production (`visa-tokenization` service). The 26-feature vector is derived from `Shack.xlsx — DataPoints Definition`, ensuring training-serving parity with the Snowflake export pipeline.
+The request schema mirrors the real Visa `approveProvisioning` API used in production (`visa-tokenization` service). The 53-feature vector is derived from `Shack.xlsx — DataPoints Definition` (26 source columns, expanded via one-hot encoding for all nominal categorical fields), ensuring training-serving parity with the Snowflake export pipeline.
 
 ---
 
@@ -19,9 +19,11 @@ Browser (index.html)
 EvaluationController
         │
         ├─ 1. EncodingService
-        │       Converts raw TokenizationRequest into float[26]
-        │       using Snowflake-compatible MD5 hashing
-        │       (ABS(MD5_NUMBER_LOWER64(value)) % buckets)
+        │       Converts raw TokenizationRequest into float[53]
+        │       following DataPoints Definition sheet row order.
+        │       Hash fields  → Snowflake-compatible MD5 % buckets
+        │       Ordinal fields→ raw int / declared max
+        │       Nominal fields→ one-hot binary expansion
         │
         ├─ 2. ModelInferenceService
         │       Loads fraud_model.onnx at startup via ONNX Runtime
@@ -40,38 +42,83 @@ EvaluationController
 
 ---
 
-## Feature Vector — 26 Features
+## Feature Vector — 53 Features
 
-Source: `Shack.xlsx — DataPoints Definition` sheet. The index order is the strict contract between `EncodingService.java`, the Snowflake export SQL, and the trained ONNX model.
+Source: `Shack.xlsx — DataPoints Definition` sheet (26 source columns).
+Index order follows the sheet **row by row**. One-hot expanded columns for each
+nominal field appear immediately after their source row position.
+This order is the strict contract between `EncodingService.java`,
+the Snowflake training export SQL, and the trained ONNX model.
 
-| Index | Column | Source Field | Type | Encoding |
-|-------|--------|-------------|------|----------|
-| 0 | `account_holder_name` | `accountHolderName` | Free Text | Snowflake MD5 % 1000 / 1000 |
-| 1 | `token_requestor_id` | `tokenRequestorId` | Low-Card | APPLE=0, GOOGLE=1, OTHER=2 / 2 |
-| 2 | `consumer_entry_mode` | `consumerEntryMode` | Low-Card | KEY_ENTERED=0, CAMERA_CAPTURED=1, UNKNOWN=2 / 2 |
-| 3 | `device_ip_address_v4` | `deviceInfo.deviceIpAddressV4` | High-Card IP | MD5(first 3 octets) % 10000 / 10000 |
-| 4 | `wallet_provider_device_score` | `walletProviderDeviceScore` | Ordinal 1–5 | raw / 5 |
-| 5 | `device_type` | `deviceInfo.deviceType` | Low-Card | UNKNOWN=0…AUTOMOBILE=8 / 8 |
-| 6 | `wallet_provider_account_score` | `walletProviderAccountScore` | Ordinal 1–5 | raw / 5 |
-| 7 | `device_name` | `deviceInfo.deviceName` | Free Text | Snowflake MD5 % 1000 / 1000 |
-| 8 | `device_id` | `deviceInfo.deviceId` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 9 | `wallet_provider_risk_assessment` | `walletProviderRiskAssessment` | Ordinal 0–2 | raw / 2 |
-| 10 | `device_number` | `deviceInfo.deviceNumber` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 11 | `wallet_provider_reason_codes` | `walletProviderReasonCodes` | Low-Card multi-value | Snowflake MD5 of full string % 100 / 100 |
-| 12 | `token_type` | `tokenInfo.tokenType` | Low-Card | SECURE_ELEMENT=0, HCE=1, CARD_ON_FILE=2, ECOMMERCE=3, QRC=4 / 4 |
-| 13 | `risk_assessment_score` | `riskAssessmentScore` | Ordinal 1–5 | raw / 5 |
-| 14 | `device_language_code` | `deviceInfo.deviceLanguageCode` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 15 | `pan_reference_id` | `panReferenceId` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 16 | `cvv2_results_code` | `cvv2ResultsCode` | Low-Card | M=0, N=1, P=2, S=3, U=4, NULL=5 / 5 |
-| 17 | `pan_source` | `panSource` | Low-Card | KEY_ENTERED=0, ON_FILE=1, MOBILE_BANKING_APP=2, TOKEN=3, CHIP_DIP=4, CONTACTLESS_TAP=5 / 5 |
-| 18 | `visa_token_score` | `visaTokenScore` | Ordinal 1–5 | raw / 5 |
-| 19 | `NAME_ON_ACCOUNT` | `nameOnAccount` | Free Text | Snowflake MD5 % 1000 / 1000 |
-| 20 | `CARDHOLDER_COUNTRY` | `cardholderCountry` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 21 | `TOKEN_PROVISION_IP_COUNTRY` | `tokenProvisionIpCountry` | High-Card | Snowflake MD5 % 10000 / 10000 |
-| 22 | `LAST_LOGGED_IN_DEVICE_TYPE` | `lastLoggedInDeviceType` | Low-Card | iOS=0, Android=1, Web=2 / 2 |
-| 23 | `LAST_LOGGED_IN_DEVICE_NAME` | `lastLoggedInDeviceName` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 24 | `LAST_LOGGED_IN_COUNTRY` | `lastLoggedInCountry` | High-Card | Snowflake MD5 % 1000 / 1000 |
-| 25 | `LAST_LOGGED_IN_IP_ADDRESS` | `lastLoggedInIpAddress` | High-Card IP | MD5(first 3 octets) % 10000 / 10000 |
+See also: `Shack.xlsx — Model Training Columns` for the exact Snowflake SQL
+expressions and training column names.
+
+### Encoding strategy
+
+| Type | Fields | Encoding |
+|------|--------|----------|
+| **High-Cardinality / Free Text** | account_holder_name, device_name, device_id, device_number, device_language_code, pan_reference_id, name_on_account, cardholder_country, token_provision_ip_country, last_logged_in_device_name, last_logged_in_country, wallet_provider_reason_codes | Snowflake MD5 `ABS(MD5_NUMBER_LOWER64(value)) % buckets / buckets` |
+| **IP Address** | device_ip_address_v4, last_logged_in_ip_address | MD5 of first 3 octets, 10 000 buckets |
+| **Ordinal** | wallet_provider_device_score, wallet_provider_account_score, wallet_provider_risk_assessment, risk_assessment_score, visa_token_score | `raw integer / declared max` |
+| **One-hot (nominal)** | token_requestor_id, consumer_entry_mode, device_type, token_type, cvv2_results_code, pan_source, LAST_LOGGED_IN_DEVICE_TYPE | One binary float per category value (1.0 or 0.0) |
+
+### Full index table
+
+| Index | Training Column Name | Source Field | Encoding |
+|-------|---------------------|-------------|----------|
+| 0 | `account_holder_name` | `accountHolderName` | MD5 % 1000 / 1000 |
+| 1 | `token_requestor_is_apple` | `tokenRequestorId` | One-hot |
+| 2 | `token_requestor_is_google` | `tokenRequestorId` | One-hot |
+| 3 | `consumer_entry_is_key_entered` | `consumerEntryMode` | One-hot |
+| 4 | `consumer_entry_is_camera_captured` | `consumerEntryMode` | One-hot |
+| 5 | `consumer_entry_is_unknown` | `consumerEntryMode` | One-hot |
+| 6 | `device_ip_address_v4` | `deviceInfo.deviceIpAddressV4` | MD5(3 octets) % 10000 / 10000 |
+| 7 | `wallet_provider_device_score` | `walletProviderDeviceScore` | Ordinal 1–5 / 5 |
+| 8 | `device_type_is_unknown` | `deviceInfo.deviceType` | One-hot |
+| 9 | `device_type_is_mobile_phone` | `deviceInfo.deviceType` | One-hot |
+| 10 | `device_type_is_tablet` | `deviceInfo.deviceType` | One-hot |
+| 11 | `device_type_is_watch` | `deviceInfo.deviceType` | One-hot |
+| 12 | `device_type_is_mobilephone_or_tablet` | `deviceInfo.deviceType` | One-hot |
+| 13 | `device_type_is_pc` | `deviceInfo.deviceType` | One-hot |
+| 14 | `device_type_is_household_device` | `deviceInfo.deviceType` | One-hot |
+| 15 | `device_type_is_wearable_device` | `deviceInfo.deviceType` | One-hot |
+| 16 | `device_type_is_automobile_device` | `deviceInfo.deviceType` | One-hot |
+| 17 | `wallet_provider_account_score` | `walletProviderAccountScore` | Ordinal 1–5 / 5 |
+| 18 | `device_name` | `deviceInfo.deviceName` | MD5 % 1000 / 1000 |
+| 19 | `device_id` | `deviceInfo.deviceId` | MD5 % 1000 / 1000 |
+| 20 | `wallet_provider_risk_assessment` | `walletProviderRiskAssessment` | Ordinal 0–2 / 2 |
+| 21 | `device_number` | `deviceInfo.deviceNumber` | MD5 % 1000 / 1000 |
+| 22 | `wallet_provider_reason_codes` | `walletProviderReasonCodes` | MD5 % 100 / 100 (multi-value, deferred) |
+| 23 | `token_type_is_secure_element` | `tokenInfo.tokenType` | One-hot |
+| 24 | `token_type_is_hce` | `tokenInfo.tokenType` | One-hot |
+| 25 | `token_type_is_card_on_file` | `tokenInfo.tokenType` | One-hot |
+| 26 | `token_type_is_ecommerce` | `tokenInfo.tokenType` | One-hot |
+| 27 | `token_type_is_qrc` | `tokenInfo.tokenType` | One-hot |
+| 28 | `risk_assessment_score` | `riskAssessmentScore` | Ordinal 1–5 / 5 |
+| 29 | `device_language_code` | `deviceInfo.deviceLanguageCode` | MD5 % 1000 / 1000 |
+| 30 | `pan_reference_id` | `panReferenceId` | MD5 % 1000 / 1000 |
+| 31 | `cvv2_is_m` | `cvv2ResultsCode` | One-hot |
+| 32 | `cvv2_is_n` | `cvv2ResultsCode` | One-hot |
+| 33 | `cvv2_is_p` | `cvv2ResultsCode` | One-hot |
+| 34 | `cvv2_is_s` | `cvv2ResultsCode` | One-hot |
+| 35 | `cvv2_is_u` | `cvv2ResultsCode` | One-hot |
+| 36 | `cvv2_is_null` | `cvv2ResultsCode` | One-hot |
+| 37 | `pan_source_is_key_entered` | `panSource` | One-hot |
+| 38 | `pan_source_is_on_file` | `panSource` | One-hot |
+| 39 | `pan_source_is_mobile_banking_app` | `panSource` | One-hot |
+| 40 | `pan_source_is_token` | `panSource` | One-hot |
+| 41 | `pan_source_is_chip_dip` | `panSource` | One-hot |
+| 42 | `pan_source_is_contactless_tap` | `panSource` | One-hot |
+| 43 | `visa_token_score` | `visaTokenScore` | Ordinal 1–5 / 5 |
+| 44 | `name_on_account` | `nameOnAccount` | MD5 % 1000 / 1000 |
+| 45 | `cardholder_country` | `cardholderCountry` | MD5 % 1000 / 1000 |
+| 46 | `token_provision_ip_country` | `tokenProvisionIpCountry` | MD5 % 10000 / 10000 |
+| 47 | `last_login_device_is_ios` | `lastLoggedInDeviceType` | One-hot |
+| 48 | `last_login_device_is_android` | `lastLoggedInDeviceType` | One-hot |
+| 49 | `last_login_device_is_web` | `lastLoggedInDeviceType` | One-hot |
+| 50 | `last_logged_in_device_name` | `lastLoggedInDeviceName` | MD5 % 1000 / 1000 |
+| 51 | `last_logged_in_country` | `lastLoggedInCountry` | MD5 % 1000 / 1000 |
+| 52 | `last_logged_in_ip_address` | `lastLoggedInIpAddress` | MD5(3 octets) % 10000 / 10000 |
 
 ---
 
@@ -79,9 +126,9 @@ Source: `Shack.xlsx — DataPoints Definition` sheet. The index order is the str
 
 All high-cardinality and free-text features use the same hashing function as Snowflake's `MD5_NUMBER_LOWER64`, ensuring identical bucket assignments at training time (Snowflake SQL) and serving time (Java `EncodingService`).
 
-**Snowflake SQL:**
+**Snowflake SQL** (the `AS` alias must use the exact training column name):
 ```sql
-ABS(MD5_NUMBER_LOWER64(column_value)) % 1000 AS feature
+ABS(MD5_NUMBER_LOWER64(account_holder_name)) % 1000 / 1000.0 AS account_holder_name
 ```
 
 **Java (EncodingService):**
@@ -106,7 +153,7 @@ fraud-detection-poc/
 ├── build.gradle                          # Gradle Groovy DSL — Spring Boot 3.5, Spring AI 1.1.8
 ├── settings.gradle
 ├── scripts/
-│   └── generate_dummy_onnx.py            # Generates placeholder fraud_model.onnx
+│   └── generate_dummy_onnx.py            # Generates placeholder fraud_model.onnx (53 features)
 └── src/main/
     ├── java/com/solarisbank/frauddetection/
     │   ├── FraudDetectionApplication.java
@@ -117,30 +164,30 @@ fraud-detection-poc/
     │   ├── controller/
     │   │   └── EvaluationController.java  # POST /api/v1/evaluate
     │   ├── dto/
-    │   │   ├── TokenizationRequest.java   # 26-feature request — mirrors Visa approveProvisioning API
+    │   │   ├── TokenizationRequest.java   # 53-feature request — mirrors Visa approveProvisioning API
     │   │   ├── TokenInfo.java             # Nested token metadata
     │   │   ├── DeviceInfo.java            # Nested device metadata
     │   │   └── EvaluationResponse.java    # score + decision + aiExplanation
     │   ├── service/
-    │   │   ├── EncodingService.java       # Raw request → float[26] with Snowflake-compatible MD5
+    │   │   ├── EncodingService.java       # Raw request → float[53] (hash / ordinal / one-hot)
     │   │   ├── ModelInferenceService.java # ONNX Runtime inference wrapper
     │   │   ├── DocumentIngestionService.java # Loads fraud-policy.md at startup
     │   │   └── BedrockExplainerService.java  # Bedrock Converse RAG explanation
     │   └── util/
-    │       └── FeatureVector.java         # Canonical feature index constants (26 features)
+    │       └── FeatureVector.java         # Canonical feature index constants (53 features)
     └── resources/
         ├── application.yml
         ├── docs/
         │   └── fraud-policy.md            # Internal fraud rules — RAG context
         ├── mappings/
-        │   └── encoding-mappings.json     # Label maps, bucket sizes, ordinal max values
+        │   └── encoding-mappings.json     # Hash bucket sizes and ordinal max values
         ├── models/
         │   └── fraud_model.onnx           # Placeholder model (replace with trained)
         └── static/
             ├── index.html                 # Dashboard — Tailwind + vanilla JS
             └── samples/
-                ├── low-risk.json          # Sample APPROVED payload (all 26 features)
-                └── high-risk.json         # Sample REJECTED payload (all 26 features)
+                ├── low-risk.json          # Sample APPROVED payload
+                └── high-risk.json         # Sample REJECTED payload
 ```
 
 ---
@@ -228,6 +275,7 @@ Fill in the tokenization request fields manually, or click one of the two sample
 
 | Element | Description |
 |---------|-------------|
+| Latency | End-to-end request time shown in the top-right of the score card (e.g. `38 ms` for ONNX-only, `2.34 s` for ONNX + Bedrock) |
 | ML Score | Fraud probability from the ONNX model (0.000–1.000), colour-coded gauge |
 | Final Decision | `APPROVED` (green) / `REVIEW` (yellow) / `REJECTED` (red) |
 | Analyst Audit Report | Natural-language explanation from Amazon Bedrock — visible only on `REJECTED` decisions |
@@ -238,7 +286,9 @@ Fill in the tokenization request fields manually, or click one of the two sample
 
 ### `POST /api/v1/evaluate`
 
-**Minimal request body:**
+**Request body** (`application/json`) — fields mirror the Visa `approveProvisioning` API.
+All fields are optional at the HTTP level; `EncodingService` applies `0.0f` defaults for any
+missing values so the model always receives a valid `float[53]` vector.
 
 ```json
 {
@@ -282,21 +332,19 @@ Fill in the tokenization request fields manually, or click one of the two sample
 
 **Response — APPROVED:**
 ```json
-{ "score": 0.2850, "decision": "APPROVED" }
+{ "score": 0.0832, "decision": "APPROVED" }
 ```
 
 **Response — REJECTED (with Bedrock explanation):**
 ```json
 {
-  "score": 0.9881,
+  "score": 0.9957,
   "decision": "REJECTED",
   "aiExplanation": "This request was flagged due to..."
 }
 ```
 
 > `aiExplanation` is omitted from the response when the decision is not `REJECTED`.
-
-All fields not present in the body default to `null` / `0` per `EncodingService` defaults — the model always receives a valid `float[26]` vector.
 
 ---
 
@@ -329,8 +377,8 @@ The committed `fraud_model.onnx` is a **placeholder** generated by `scripts/gene
 
 | Payload | Score | Decision |
 |---------|-------|----------|
-| `low-risk.json` | `~0.285` | APPROVED |
-| `high-risk.json` | `~0.988` | REJECTED |
+| `low-risk.json` | `~0.083` | APPROVED |
+| `high-risk.json` | `~0.996` | REJECTED |
 
 To regenerate the placeholder:
 ```bash
@@ -342,18 +390,39 @@ python3 scripts/generate_dummy_onnx.py
 
 1. Export your SageMaker XGBoost model to ONNX:
    ```python
+   import tarfile
+   from xgboost import XGBClassifier
    from skl2onnx import convert_sklearn
    from skl2onnx.common.data_types import FloatTensorType
 
-   initial_type = [("float_input", FloatTensorType([None, 26]))]
-   onnx_model = convert_sklearn(model, initial_types=initial_type, target_opset=17)
+   # Extract SageMaker artefact
+   with tarfile.open('model.tar.gz') as t:
+       t.extractall('.')
+
+   clf = XGBClassifier()
+   clf.load_model('xgboost-model')
+
+   initial_type = [("float_input", FloatTensorType([None, 53]))]
+   onnx_model = convert_sklearn(clf, initial_types=initial_type, target_opset=17)
+
+   with open('fraud_model.onnx', 'wb') as f:
+       f.write(onnx_model.SerializeToString())
    ```
 
-2. Ensure the input node is named `float_input` (shape `[N, 26]`) and the output node is named `probabilities` (shape `[N, 2]`)
+2. Verify node names before deploying:
+   ```python
+   import onnx
+   model = onnx.load('fraud_model.onnx')
+   print("Inputs: ", [i.name for i in model.graph.input])
+   print("Outputs:", [o.name for o in model.graph.output])
+   # Must be: float_input and probabilities
+   ```
 
-3. Drop the file into `src/main/resources/models/fraud_model.onnx`
+3. Ensure the input node is named `float_input` (shape `[N, 53]`) and the output node is named `probabilities` (shape `[N, 2]`, where column 1 = P(fraud))
 
-4. The **feature column order must match `FeatureVector.java` indices 0–25** exactly — this is the contract between the Snowflake export SQL and `EncodingService`
+4. Drop the file into `src/main/resources/models/fraud_model.onnx`
+
+5. The **feature column order must match `FeatureVector.java` indices 0–52** exactly — this is the contract between the Snowflake export SQL and `EncodingService`. Refer to `Shack.xlsx — Model Training Columns` for the exact SQL expressions.
 
 No configuration changes required — input/output node names already match.
 
@@ -361,17 +430,24 @@ No configuration changes required — input/output node names already match.
 
 ## SageMaker Training Notes
 
-**Target column:** `is_fraud` (binary: 0 = legitimate, 1 = fraud)
+**Target column:** `is_fraud` (binary: 0 = legitimate, 1 = fraud). This column is **not** a model input — it is the training label only.
 
 **Recommended algorithm:** XGBoost binary classifier
 ```
-objective = "binary:logistic"
-scale_pos_weight = count(negative) / count(positive)  # handles class imbalance
+objective         = "binary:logistic"
+scale_pos_weight  = count(negative) / count(positive)  # handles class imbalance
 ```
 
 **Evaluation metrics:** AUC-ROC (primary), Precision/Recall at threshold 0.65, F1 score. Do not use accuracy — fraud datasets are typically 0.1–2% positive class.
 
-**Snowflake export:** each row must contain the 26 features encoded in the same order and using the identical Snowflake SQL as the `FeatureVector.java` contract (same MD5 lower-64-bit hash, same bucket sizes, same label integers).
+**Snowflake export requirements:**
+- Each row = one historical tokenization request
+- 53 feature columns in the exact order of `FeatureVector.java` indices 0–52
+- Hash fields pre-encoded in Snowflake using `ABS(MD5_NUMBER_LOWER64(value)) % buckets / buckets.0`
+- Ordinal fields normalised by their declared max value
+- Nominal categorical fields one-hot expanded into binary (0/1) columns — one column per category value
+- Column names must match training column names in `Shack.xlsx — Model Training Columns` sheet
+- Followed by the `is_fraud` target column (last)
 
 ---
 
