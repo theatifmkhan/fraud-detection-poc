@@ -5,7 +5,7 @@ A proof-of-concept application that evaluates incoming card tokenization provisi
 - **Path A — ONNX ML Inference:** A compiled XGBoost/RandomForest classifier runs sub-millisecond fraud probability scoring on every request
 - **Path B — Amazon Bedrock RAG:** For high-risk decisions, an LLM (via Amazon Bedrock Converse API) generates a natural-language Analyst Audit Report grounded in internal fraud policy documents
 
-The request schema mirrors the real Visa `approveProvisioning` API used in production (`visa-tokenization` service). The 53-feature vector is derived from `Shack.xlsx — DataPoints Definition` (26 source columns, expanded via one-hot encoding for all nominal categorical fields), ensuring training-serving parity with the Snowflake export pipeline.
+The 53-feature vector is derived from `Shack.xlsx — DataPoints Definition` (26 source columns, expanded via one-hot encoding for all nominal categorical fields), ensuring training-serving parity with the Snowflake export pipeline.
 
 ---
 
@@ -155,7 +155,7 @@ fraud-detection-poc/
 ├── scripts/
 │   └── generate_dummy_onnx.py            # Generates placeholder fraud_model.onnx (53 features)
 └── src/main/
-    ├── java/com/solarisbank/frauddetection/
+    ├── java/io/github/theatifmkhan/frauddetection/
     │   ├── FraudDetectionApplication.java
     │   ├── config/
     │   │   ├── BedrockRegionConfig.java   # Sets aws.region system property at startup
@@ -164,7 +164,7 @@ fraud-detection-poc/
     │   ├── controller/
     │   │   └── EvaluationController.java  # POST /api/v1/evaluate
     │   ├── dto/
-    │   │   ├── TokenizationRequest.java   # 53-feature request — mirrors Visa approveProvisioning API
+    │   │   ├── TokenizationRequest.java   # Tokenization request DTO
     │   │   ├── TokenInfo.java             # Nested token metadata
     │   │   ├── DeviceInfo.java            # Nested device metadata
     │   │   └── EvaluationResponse.java    # score + decision + aiExplanation
@@ -286,8 +286,7 @@ Fill in the tokenization request fields manually, or click one of the two sample
 
 ### `POST /api/v1/evaluate`
 
-**Request body** (`application/json`) — fields mirror the Visa `approveProvisioning` API.
-All fields are optional at the HTTP level; `EncodingService` applies `0.0f` defaults for any
+**Request body** (`application/json`). All fields are optional at the HTTP level; `EncodingService` applies `0.0f` defaults for any
 missing values so the model always receives a valid `float[53]` vector.
 
 ```json
